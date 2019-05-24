@@ -33,7 +33,7 @@ type EspSystem struct {
 	Uptime            int     `json:"Uptime"`
 	LastBootCause     string  `json:"Last boot cause"`
 	ResetReason       string  `json:"Reset Reason"`
-	Load              float64 `json:"Load"`
+	Load              float32 `json:"Load"`
 	LoadLC            int     `json:"Load LC"`
 	FreeRAM           int     `json:"Free RAM"`
 }
@@ -61,7 +61,7 @@ type EspTaskValues struct {
 	ValueNumber int     `json:"ValueNumber"`
 	Name        string  `json:"Name"`
 	NrDecimals  int     `json:"NrDecimals"`
-	Value       float64 `json:"Value"`
+	Value       float32 `json:"Value"`
 }
 
 type EspDataAcquisition struct {
