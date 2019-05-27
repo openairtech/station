@@ -25,9 +25,9 @@ func main() {
 	espHost := flag.String("h", "OpenAir.local", "ESP station address")
 	espPort := flag.Int("p", 80, "ESP station port")
 
-	apiServerUrl := flag.String("a", "http://localhost:8081/v1/feeder", "data receiver address")
+	apiServerUrl := flag.String("a", "https://api.openair.city/v1/feeder", "feeder endpoint address")
 
-	updatePeriod := flag.Duration("t", 10*time.Second, "data update period")
+	updatePeriod := flag.Duration("t", 1*time.Minute, "data update period")
 
 	resolverTimeout := flag.Duration("r", 15*time.Second, "name resolver timeout")
 
