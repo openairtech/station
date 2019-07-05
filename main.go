@@ -45,7 +45,7 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	log.Printf("starting...")
+	log.Printf("starting: %s built %s", Version, Timestamp)
 
 	InitResolvers(*resolverTimeout)
 
