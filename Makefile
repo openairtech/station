@@ -2,6 +2,12 @@
 
 BIN := openair-station-esp
 PKG := github.com/openairtech/station-esp
+ARCH := amd64 arm
+
+PUB_SERVER := openair.city
+PUB_DIR := /var/www/get.openair.city/station-esp
+
+BINDIR = bin
 
 VERSION_VAR := main.Version
 TIMESTAMP_VAR := main.Timestamp
@@ -16,13 +22,24 @@ default: all
 all: build
 
 build:
-	go build -x $(GOBUILD_LDFLAGS) -v -o ./bin/$(BIN)
+	go build -x $(GOBUILD_LDFLAGS) -v -o $(BINDIR)/$(BIN)
 
-build-static:
-	env CGO_ENABLED=0 GOOS=linux go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o ./bin/$(BIN)
+build-static: $(ARCH)
+
+$(ARCH):
+	env CGO_ENABLED=0 GOOS=linux GOARCH=$@ go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).$@
+
+shasum:
+	cd $(BINDIR) && for file in $(ARCH) ; do sha256sum ./$(BIN).$${file} > ./$(BIN).$${file}.sha256.txt; done
 
 clean:
-	rm -dRf ./bin
+	rm -dRf $(BINDIR)
+
+dist: clean build-static shasum
+	cp contrib/scripts/* $(BINDIR)
+
+publish: dist
+	rsync -az $(BINDIR)/ $(PUB_SERVER):$(PUB_DIR)
 
 fmt:
 	go fmt ./...
