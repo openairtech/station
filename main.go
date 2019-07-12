@@ -33,6 +33,8 @@ func main() {
 
 	httpTimeout := flag.Duration("T", 15*time.Second, "http client timeout")
 
+	disablePmCorrectionFlag := flag.Bool("c", false, "disable PM values correction by humidity")
+
 	flag.Parse()
 
 	if *versionFlag {
@@ -76,7 +78,7 @@ func main() {
 		}
 	}()
 
-	RunStation(ctx, *espHost, *espPort, *apiServerUrl, *updatePeriod)
+	RunStation(ctx, *espHost, *espPort, *apiServerUrl, *updatePeriod, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }

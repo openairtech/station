@@ -17,6 +17,7 @@ package main
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -42,4 +43,13 @@ func Sha1(s string) string {
 	h := sha1.New()
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Convert reference to float32 to its string representation
+func Float32RefToString(r *float32) string {
+	if r == nil {
+		return "<none>"
+	}
+
+	return fmt.Sprintf("%.1f", *r)
 }

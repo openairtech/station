@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -24,7 +25,8 @@ import (
 	"github.com/openairtech/api"
 )
 
-func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl string, updatePeriod time.Duration) {
+func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl string,
+	updatePeriod time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
 	for {
@@ -80,6 +82,14 @@ func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl s
 				}
 			}
 
+			if !disablePmCorrectionFlag {
+				correctPm(&m)
+			}
+
+			log.Debugf("temperature: %s, humidity: %s, pressure: %s, pm2.5: %s, pm10: %s",
+				Float32RefToString(m.Temperature), Float32RefToString(m.Humidity), Float32RefToString(m.Pressure),
+				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
+
 			f := api.FeederData{
 				TokenId:      Sha1(data.WiFi.MACAddress),
 				Measurements: []api.Measurement{m},
@@ -103,4 +113,23 @@ func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl s
 			return
 		}
 	}
+}
+
+// Correct PM values by humidity. Based on code by Piotr Paul et al: https://github.com/piotrkpaul/esp8266-sds011
+func correctPm(m *api.Measurement) {
+	if m.Humidity == nil {
+		return
+	}
+
+	if m.Pm25 != nil {
+		*m.Pm25 = correctedPm(*m.Pm25, *m.Humidity, 0.48756, 8.60068)
+	}
+
+	if m.Pm10 != nil {
+		*m.Pm10 = correctedPm(*m.Pm10, *m.Humidity, 0.81559, 5.83411)
+	}
+}
+
+func correctedPm(pm, humidity float32, a, b float64) float32 {
+	return float32(float64(pm) / (1.0 + a*math.Pow(float64(humidity)/100.0, b)))
 }
