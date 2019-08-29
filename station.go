@@ -26,7 +26,7 @@ import (
 )
 
 func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl string,
-	updatePeriod time.Duration, disablePmCorrectionFlag bool) {
+	updatePeriod time.Duration, settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
 	for {
@@ -45,6 +45,13 @@ func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl s
 			}
 
 			log.Debugf("received sensor data: %+v", data)
+
+			uptime := time.Duration(data.System.Uptime) * time.Minute
+			if uptime < settleTime {
+				log.Debugf("ignoring sensor data since station uptime (%+v) is "+
+					"shorter than data settle time (%+v)", uptime, settleTime)
+				continue
+			}
 
 			t := api.UnixTime(time.Now())
 

@@ -29,6 +29,8 @@ func main() {
 
 	updatePeriod := flag.Duration("t", 1*time.Minute, "data update period")
 
+	settleTime := flag.Duration("S", 5*time.Minute, "data settle time after ESP station reboot")
+
 	resolverTimeout := flag.Duration("r", 15*time.Second, "name resolver timeout")
 
 	httpTimeout := flag.Duration("T", 15*time.Second, "http client timeout")
@@ -78,7 +80,7 @@ func main() {
 		}
 	}()
 
-	RunStation(ctx, *espHost, *espPort, *apiServerUrl, *updatePeriod, *disablePmCorrectionFlag)
+	RunStation(ctx, *espHost, *espPort, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }
