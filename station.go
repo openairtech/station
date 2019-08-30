@@ -25,7 +25,7 @@ import (
 	"github.com/openairtech/api"
 )
 
-func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl string,
+func RunStation(ctx context.Context, version string, espHost string, espPort int, apiServerUrl string,
 	updatePeriod time.Duration, settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
@@ -99,6 +99,7 @@ func RunStation(ctx context.Context, espHost string, espPort int, apiServerUrl s
 
 			f := api.FeederData{
 				TokenId:      Sha1(data.WiFi.MACAddress),
+				Version:      version,
 				Measurements: []api.Measurement{m},
 			}
 

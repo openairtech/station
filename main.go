@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -49,7 +50,9 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
-	log.Printf("starting: %s built %s", Version, Timestamp)
+	version := fmt.Sprintf("esp-%s_%s-%s_%s", Version, Timestamp, runtime.GOARCH, runtime.GOOS)
+
+	log.Printf("starting station, version: %s", version)
 
 	InitResolvers(*resolverTimeout)
 
@@ -80,7 +83,7 @@ func main() {
 		}
 	}()
 
-	RunStation(ctx, *espHost, *espPort, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
+	RunStation(ctx, version, *espHost, *espPort, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }
