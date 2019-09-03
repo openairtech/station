@@ -130,11 +130,11 @@ func correctPm(m *api.Measurement) {
 	}
 
 	if m.Pm25 != nil {
-		*m.Pm25 = correctedPm(*m.Pm25, *m.Humidity, 0.48756, 8.60068)
+		*m.Pm25 = Float32Round(correctedPm(*m.Pm25, *m.Humidity, 0.48756, 8.60068), 1)
 	}
 
 	if m.Pm10 != nil {
-		*m.Pm10 = correctedPm(*m.Pm10, *m.Humidity, 0.81559, 5.83411)
+		*m.Pm10 = Float32Round(correctedPm(*m.Pm10, *m.Humidity, 0.81559, 5.83411), 1)
 	}
 }
 

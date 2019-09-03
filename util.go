@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 )
 
@@ -52,4 +53,10 @@ func Float32RefToString(r *float32) string {
 	}
 
 	return fmt.Sprintf("%.1f", *r)
+}
+
+// Round float32 x to given number of decimal places
+func Float32Round(x float32, places int) float32 {
+	pow := math.Pow(10, float64(places))
+	return float32(math.Round(pow*float64(x)) / pow)
 }
