@@ -1,0 +1,105 @@
+{"System":{
+"Build":20103,
+"Git Build":"",
+"System libraries":"ESP82xx Core 2_5_0, NONOS SDK 3.0.0-dev(c0f7b44), LWIP: 2.1.2 PUYA support",
+"Plugins":46,
+"Plugin description":" [Normal]",
+"Local time":"2019-09-16 10:56:19",
+"Unit":0,
+"Name":"OpenAir",
+"Uptime":7238,
+"Last boot cause":"Cold boot",
+"Reset Reason":"External System",
+"Load":20.60,
+"Load LC":1144,
+"Free RAM":11864
+},
+"WiFi":{
+"Hostname":"OpenAir",
+"IP config":"DHCP",
+"IP":"192.168.1.1",
+"Subnet Mask":"255.255.255.0",
+"Gateway IP":"192.168.1.2",
+"MAC address":"12:34:56:78:90:AB",
+"DNS 1":"192.168.1.252",
+"DNS 2":"192.168.1.254",
+"SSID":"ssid-iot",
+"BSSID":"00:11:22:33:44:55",
+"Channel":1,
+"Connected msec":257726262,
+"Last Disconnect Reason":201,
+"Last Disconnect Reason str":"(201) No AP found",
+"Number reconnects":4,
+"RSSI":-36
+},
+"Sensors":[
+{
+"TaskValues": [
+{"ValueNumber":1,
+"Name":"Temperature",
+"NrDecimals":1,
+"Value":25.0
+},
+{"ValueNumber":2,
+"Name":"Humidity",
+"NrDecimals":1,
+"Value":33.5
+},
+{"ValueNumber":3,
+"Name":"Pressure",
+"NrDecimals":1,
+"Value":1015.1
+}],
+"DataAcquisition": [
+{"Controller":1,
+"IDX":0,
+"Enabled":"true"
+},
+{"Controller":2,
+"IDX":0,
+"Enabled":"false"
+},
+{"Controller":3,
+"IDX":0,
+"Enabled":"false"
+}],
+"TaskInterval":30,
+"Type":"Environment - BMx280",
+"TaskName":"BME280",
+"TaskEnabled":"true",
+"TaskNumber":1
+},
+{
+"TaskValues": [
+{"ValueNumber":1,
+"Name":"PM2.5",
+"NrDecimals":1,
+"Value":1.8
+},
+{"ValueNumber":2,
+"Name":"PM10",
+"NrDecimals":1,
+"Value":14.5
+}],
+"DataAcquisition": [
+{"Controller":1,
+"IDX":0,
+"Enabled":"true"
+},
+{"Controller":2,
+"IDX":0,
+"Enabled":"false"
+},
+{"Controller":3,
+"IDX":0,
+"Enabled":"false"
+}],
+"TaskInterval":30,
+"Type":"Dust - SDS011/018/198",
+"TaskName":"SDS011",
+"TaskEnabled":"true",
+"TaskNumber":2
+}
+],
+"TTL":30000
+}

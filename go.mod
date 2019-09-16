@@ -9,6 +9,7 @@ require (
 	github.com/openairtech/api v0.0.0
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/sirupsen/logrus v1.4.1
+	github.com/stretchr/testify v1.2.2
 	golang.org/x/net v0.0.0-20190424112056-4829fb13d2c6 // indirect
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58 // indirect
 )

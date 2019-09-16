@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -53,44 +54,10 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 				continue
 			}
 
-			t := api.UnixTime(time.Now())
-
-			m := api.Measurement{
-				Timestamp: &t,
-			}
-
-			for _, s := range data.Sensors {
-				if !s.TaskEnabled {
-					continue
-				}
-				switch s.TaskName {
-				case "BME280":
-					for _, v := range s.TaskValues {
-						cv := v
-						switch v.Name {
-						case "Temperature":
-							m.Temperature = &cv.Value
-						case "Humidity":
-							m.Humidity = &cv.Value
-						case "Pressure":
-							m.Pressure = &cv.Value
-						}
-					}
-				case "SDS011":
-					for _, v := range s.TaskValues {
-						cv := v
-						switch v.Name {
-						case "PM2.5":
-							m.Pm25 = &cv.Value
-						case "PM10":
-							m.Pm10 = &cv.Value
-						}
-					}
-				}
-			}
+			m := data.Measurement(api.UnixTime(time.Now()))
 
 			if !disablePmCorrectionFlag {
-				correctPm(&m)
+				correctPm(m)
 			}
 
 			log.Debugf("temperature: %s, humidity: %s, pressure: %s, pm2.5: %s, pm10: %s",
@@ -98,9 +65,9 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
 
 			f := api.FeederData{
-				TokenId:      Sha1(data.WiFi.MACAddress),
+				TokenId:      stationTokenId(&data),
 				Version:      version,
-				Measurements: []api.Measurement{m},
+				Measurements: []api.Measurement{*m},
 			}
 
 			log.Debugf("posting data to %s: %+v", apiServerUrl, f)
@@ -123,7 +90,10 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 	}
 }
 
-// Correct PM values by humidity. Based on code by Piotr Paul et al: https://github.com/piotrkpaul/esp8266-sds011
+func stationTokenId(stationData *EspData) string {
+	return Sha1(strings.ToUpper(stationData.WiFi.MacAddress()))
+}
+
 func correctPm(m *api.Measurement) {
 	if m.Humidity == nil {
 		return

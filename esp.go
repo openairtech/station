@@ -14,6 +14,10 @@
 
 package main
 
+import (
+	"github.com/openairtech/api"
+)
+
 type EspData struct {
 	System  EspSystem    `json:"System"`
 	WiFi    EspWiFi      `json:"WiFi"`
@@ -24,7 +28,7 @@ type EspData struct {
 type EspSystem struct {
 	Build             int     `json:"Build"`
 	GitBuild          string  `json:"Git Build"`
-	SystemLibraries   string  `json:"EspSystem libraries"`
+	SystemLibraries   string  `json:"System libraries"`
 	Plugins           int     `json:"Plugins"`
 	PluginDescription string  `json:"Plugin description"`
 	LocalTime         string  `json:"Local time"`
@@ -44,7 +48,8 @@ type EspWiFi struct {
 	IP                      string `json:"IP"`
 	SubnetMask              string `json:"Subnet Mask"`
 	GatewayIP               string `json:"Gateway IP"`
-	MACAddress              string `json:"MAC address"`
+	MACAddress              string `json:"MAC address"` // mega-20190301
+	StationMAC              string `json:"STA MAC"`     // mega-20190903
 	DNS1                    string `json:"DNS 1"`
 	DNS2                    string `json:"DNS 2"`
 	SSID                    string `json:"SSID"`
@@ -78,4 +83,49 @@ type EspSensors struct {
 	TaskName        string               `json:"TaskName"`
 	TaskEnabled     bool                 `json:"TaskEnabled,string"`
 	TaskNumber      int                  `json:"TaskNumber"`
+}
+
+func (ed *EspData) Measurement(t api.UnixTime) *api.Measurement {
+	m := api.Measurement{
+		Timestamp: &t,
+	}
+
+	for _, s := range ed.Sensors {
+		if !s.TaskEnabled {
+			continue
+		}
+		switch s.TaskName {
+		case "BME280":
+			for _, v := range s.TaskValues {
+				cv := v
+				switch v.Name {
+				case "Temperature":
+					m.Temperature = &cv.Value
+				case "Humidity":
+					m.Humidity = &cv.Value
+				case "Pressure":
+					m.Pressure = &cv.Value
+				}
+			}
+		case "SDS011":
+			for _, v := range s.TaskValues {
+				cv := v
+				switch v.Name {
+				case "PM2.5":
+					m.Pm25 = &cv.Value
+				case "PM10":
+					m.Pm10 = &cv.Value
+				}
+			}
+		}
+	}
+
+	return &m
+}
+
+func (ew *EspWiFi) MacAddress() string {
+	if ew.MACAddress != "" {
+		return ew.MACAddress
+	}
+	return ew.StationMAC
 }
