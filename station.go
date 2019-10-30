@@ -16,45 +16,298 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/d2r2/go-bsbmp"
+	"github.com/d2r2/go-i2c"
+	bmelogger "github.com/d2r2/go-logger"
+
+	"github.com/NotifAi/serial"
+
+	"github.com/openairtech/sds011/go/sds011"
+
 	"github.com/openairtech/api"
 )
 
-func RunStation(ctx context.Context, version string, espHost string, espPort int, apiServerUrl string,
+// System epoch time (2019-01-01 GMT) as an Unix time
+const systemEpoch = 1546300800
+
+type StationData struct {
+	TokenId         string
+	Uptime          time.Duration
+	LastMeasurement *api.Measurement
+}
+
+type Station interface {
+	Start() error
+	Stop()
+	GetData() (*StationData, error)
+}
+
+type EspStation struct {
+	host string
+	port int
+}
+
+func NewEspStation(host string, port int) *EspStation {
+	return &EspStation{
+		host: host,
+		port: port,
+	}
+}
+
+func (es *EspStation) Start() error {
+	log.Print("started ESP station")
+	return nil
+}
+
+func (es *EspStation) Stop() {
+	log.Print("stopped ESP station")
+}
+
+func (es *EspStation) GetData() (*StationData, error) {
+	url := fmt.Sprintf("http://%s:%d/json", es.host, es.port)
+
+	log.Debugf("getting sensor data from ESP station %s", url)
+
+	var data EspData
+	if err := GetData(url, &data); err != nil {
+		log.Errorf("sensor data request failed: %v", err)
+		return nil, err
+	}
+
+	log.Debugf("received sensor data: %+v", data)
+
+	m := data.Measurement(api.UnixTime(time.Now()))
+
+	return &StationData{
+		TokenId:         stationTokenId(data.WiFi.MacAddress()),
+		Uptime:          time.Duration(data.System.Uptime) * time.Minute,
+		LastMeasurement: m,
+	}, nil
+}
+
+type RpiStation struct {
+	i2cBusId          int
+	bmeSensorAddress  int
+	sdsSensorPort     string
+	sdsSensorInterval int
+
+	startTime  time.Time
+	macAddress string
+	tokenId    string
+
+	i2cBus     *i2c.I2C
+	serialPort serial.Port
+
+	bmeSensor *bsbmp.BMP
+	sdsSensor *sds011.Sensor
+
+	pmLock sync.RWMutex
+	pm25   float32
+	pm10   float32
+}
+
+func NewRpiStation(i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sdsSensorInterval int) (*RpiStation, error) {
+	macAddress := WirelessInterfaceMacAddr()
+	if macAddress == "" {
+		return nil, errors.New("can't determine station MAC address")
+	}
+	return &RpiStation{
+		startTime:         time.Now(),
+		macAddress:        macAddress,
+		tokenId:           stationTokenId(macAddress),
+		i2cBusId:          i2cBusId,
+		bmeSensorAddress:  bmeSensorAddress,
+		sdsSensorPort:     sdsSensorPort,
+		sdsSensorInterval: sdsSensorInterval,
+	}, nil
+}
+
+func (rs *RpiStation) Start() error {
+	log.Print("starting RPi station...")
+
+	// Init BME280 sensor I2C bus
+	if err := rs.initI2cBus(); err != nil {
+		return fmt.Errorf("I2C bus init error: %v", err)
+	}
+
+	// Init BME280 sensor
+	if err := rs.initBmeSensor(); err != nil {
+		return fmt.Errorf("BME280 sensor init error: %v", err)
+	}
+
+	// Open SDS011 sensor serial port
+	if err := rs.initSerialPort(); err != nil {
+		return fmt.Errorf("serial port init error: %v", err)
+	}
+
+	// Init SDS011 sensor
+	if err := rs.initSdsSensor(); err != nil {
+		return fmt.Errorf("SDS011 sensor init error: %v", err)
+	}
+
+	// Start SDS011 sensor data reading
+	go rs.readSdsSensor()
+
+	return nil
+}
+
+func (rs *RpiStation) initSerialPort() error {
+	var err error
+	rs.serialPort, err = serial.OpenPort(serial.Config{
+		Name: rs.sdsSensorPort,
+		Baud: 9600,
+	})
+	if err != nil {
+		return err
+	}
+	return rs.flushSerialPort()
+}
+
+func (rs *RpiStation) flushSerialPort() error {
+	return rs.serialPort.Flush()
+}
+
+func (rs *RpiStation) initI2cBus() (err error) {
+	rs.i2cBus, err = i2c.NewI2C(uint8(rs.bmeSensorAddress), rs.i2cBusId)
+	return
+}
+
+func (rs *RpiStation) initBmeSensor() error {
+	_ = bmelogger.ChangePackageLogLevel("i2c", bmelogger.ErrorLevel)
+	_ = bmelogger.ChangePackageLogLevel("bsbmp", bmelogger.ErrorLevel)
+
+	// Check BME280 sensor presence
+	var err error
+	if rs.bmeSensor, err = bsbmp.NewBMP(bsbmp.BME280, rs.i2cBus); err != nil {
+		return fmt.Errorf("can't find BME280 sensor: %v", err)
+	}
+
+	// Check BME280 sensor have valid state
+	if err = rs.bmeSensor.IsValidCoefficients(); err != nil {
+		return fmt.Errorf("invalid BME280 sensor state: %v", err)
+	}
+
+	return nil
+}
+
+func (rs *RpiStation) initSdsSensor() error {
+	rs.sdsSensor = sds011.NewSensor(rs.serialPort)
+	return rs.sdsSensor.SetCycle(uint8(rs.sdsSensorInterval))
+}
+
+func (rs *RpiStation) readSdsSensor() {
+	for {
+		point, err := rs.sdsSensor.Get()
+		if err != nil {
+			log.Errorf("can't read SDS011 sensor: %v", err)
+			time.Sleep(3 * time.Second)
+			_ = rs.flushSerialPort()
+			continue
+		}
+		rs.pmLock.Lock()
+		rs.pm25 = float32(point.PM25)
+		rs.pm10 = float32(point.PM10)
+		rs.pmLock.Unlock()
+		log.Debugf("read SDS011 sensor values, PM2.5: %v, PM10: %v", point.PM25, point.PM10)
+	}
+}
+
+func (rs *RpiStation) Stop() {
+	log.Print("stopping RPi station...")
+	_ = rs.i2cBus.Close()
+	rs.sdsSensor.Close()
+}
+
+func (rs *RpiStation) GetData() (*StationData, error) {
+	timestamp := api.UnixTime(time.Now())
+
+	// Read temperature in Celsius degree
+	temperature, err := rs.bmeSensor.ReadTemperatureC(bsbmp.ACCURACY_STANDARD)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read relative humidity
+	_, humidity, err := rs.bmeSensor.ReadHumidityRH(bsbmp.ACCURACY_STANDARD)
+	if err != nil {
+		return nil, err
+	}
+
+	// Read pressure in Pa
+	pressure, err := rs.bmeSensor.ReadPressurePa(bsbmp.ACCURACY_STANDARD)
+	if err != nil {
+		return nil, err
+	}
+	// Convert pressure to hPa
+	pressure /= 100
+
+	rs.pmLock.RLock()
+	pm25 := rs.pm25
+	pm10 := rs.pm10
+	rs.pmLock.RUnlock()
+
+	m := &api.Measurement{
+		Timestamp:   &timestamp,
+		Temperature: &temperature,
+		Humidity:    &humidity,
+		Pressure:    &pressure,
+		Pm25:        &pm25,
+		Pm10:        &pm10,
+		Aqi:         nil,
+	}
+
+	return &StationData{
+		TokenId:         rs.tokenId,
+		Uptime:          time.Since(rs.startTime),
+		LastMeasurement: m,
+	}, nil
+}
+
+func RunStation(ctx context.Context, station Station, version string, apiServerUrl string,
 	updatePeriod time.Duration, settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
+
+	if err := station.Start(); err != nil {
+		log.Errorf("can't start station: %v", err)
+		return
+	}
+
+	defer station.Stop()
 
 	for {
 		select {
 		case <-time.After(p):
 			p = updatePeriod
 
-			url := fmt.Sprintf("http://%s:%d/json", espHost, espPort)
-
-			log.Debugf("getting sensor data from station %s", url)
-
-			var data EspData
-			if err := GetData(url, &data); err != nil {
-				log.Errorf("sensor data request failed: %v", err)
+			data, err := station.GetData()
+			if err != nil {
+				log.Errorf("station data request failed: %v", err)
 				continue
 			}
 
-			log.Debugf("received sensor data: %+v", data)
+			log.Debugf("station data: %+v", data)
 
-			uptime := time.Duration(data.System.Uptime) * time.Minute
-			if uptime < settleTime {
-				log.Debugf("ignoring sensor data since station uptime (%+v) is "+
-					"shorter than data settle time (%+v)", uptime, settleTime)
+			if time.Now().Before(time.Unix(systemEpoch, 0)) {
+				log.Info("skipping station data posting since station system time probably is not in sync")
 				continue
 			}
 
-			m := data.Measurement(api.UnixTime(time.Now()))
+			if data.Uptime < settleTime {
+				log.Infof("skipping station data posting since station uptime (%+v) is "+
+					"shorter than data settle time (%+v)", data.Uptime, settleTime)
+				continue
+			}
+
+			m := data.LastMeasurement
 
 			if !disablePmCorrectionFlag {
 				correctPm(m)
@@ -65,7 +318,7 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
 
 			f := api.FeederData{
-				TokenId:      stationTokenId(&data),
+				TokenId:      data.TokenId,
 				Version:      version,
 				Measurements: []api.Measurement{*m},
 			}
@@ -74,7 +327,7 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 
 			var r api.Result
 
-			err := PostData(apiServerUrl, f, &r)
+			err = PostData(apiServerUrl, f, &r)
 			if err != nil {
 				log.Errorf("data posting failed: %v", err)
 				continue
@@ -84,14 +337,13 @@ func RunStation(ctx context.Context, version string, espHost string, espPort int
 			}
 
 		case <-ctx.Done():
-			log.Printf("stopping")
 			return
 		}
 	}
 }
 
-func stationTokenId(stationData *EspData) string {
-	return Sha1(strings.ToUpper(stationData.WiFi.MacAddress()))
+func stationTokenId(stationMacAddress string) string {
+	return Sha1(strings.ToUpper(stationMacAddress))
 }
 
 func correctPm(m *api.Measurement) {

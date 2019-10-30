@@ -4,9 +4,9 @@
 
 set -e
 
-BIN="openair-station-esp"
+BIN="openair-station"
 
-BASE_URL="https://get.openair.city/station-esp"
+BASE_URL="https://get.openair.city/station"
 
 BIN_DIR="/usr/bin"
 
@@ -196,11 +196,11 @@ run ${sudo} chmod +x "${BIN_DIR}/${UPD_BIN}" || fatal "can't set executable bit 
 progress "Setting up systemd..."
 run ${sudo} sh -c "cat > /etc/systemd/system/${BIN}.service" <<EOF
 [Unit]
-Description=OpenAir ESP Station
+Description=OpenAir Station
 After=network.target
 
 [Service]
-ExecStart=${BIN_PATH}
+ExecStart=${BIN_PATH} \$STATION_EXEC_OPTIONS
 Restart=always
 RestartSec=5
 

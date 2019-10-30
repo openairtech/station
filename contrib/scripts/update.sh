@@ -2,9 +2,9 @@
 
 set -e
 
-BIN="openair-station-esp"
+BIN="openair-station"
 
-BASE_URL="https://get.openair.city/station-esp"
+BASE_URL="https://get.openair.city/station"
 
 BIN_DIR="/usr/bin"
 

@@ -1,11 +1,11 @@
 .PHONY: all
 
-BIN := openair-station-esp
-PKG := github.com/openairtech/station-esp
+BIN := openair-station
+PKG := github.com/openairtech/station
 ARCH := amd64 arm
 
 PUB_SERVER := openair.city
-PUB_DIR := /var/www/get.openair.city/station-esp
+PUB_DIR := /var/www/get.openair.city/station
 
 BINDIR = bin
 
@@ -13,7 +13,7 @@ VERSION_VAR := main.Version
 TIMESTAMP_VAR := main.Timestamp
 
 VERSION ?= $(shell git describe --always --dirty --tags)
-TIMESTAMP := $(shell date -u '+%Y-%m-%d_%I:%M:%S%p')
+TIMESTAMP := $(shell date '+%Y-%m-%d_%T%Z')
 
 GOBUILD_LDFLAGS := -ldflags "-s -w -X $(VERSION_VAR)=$(VERSION) -X $(TIMESTAMP_VAR)=$(TIMESTAMP)"
 
@@ -24,10 +24,13 @@ all: build
 build:
 	go build -x $(GOBUILD_LDFLAGS) -v -o $(BINDIR)/$(BIN)
 
-build-static: $(ARCH)
+build-static: $(addprefix build-static-, $(ARCH))
 
-$(ARCH):
-	env CGO_ENABLED=0 GOOS=linux GOARCH=$@ go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).$@
+build-static-amd64:
+	env CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).amd64
+
+build-static-arm:
+	env CGO_ENABLED=1 CC=arm-linux-gnueabi-gcc GOOS=linux GOARCH=arm go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).arm
 
 shasum:
 	cd $(BINDIR) && for file in $(ARCH) ; do sha256sum ./$(BIN).$${file} > ./$(BIN).$${file}.sha256.txt; done

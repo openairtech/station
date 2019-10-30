@@ -13,6 +13,11 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	StationModeEsp = "esp"
+	StationModeRpi = "rpi"
+)
+
 var (
 	Version   = "unknown"
 	Timestamp = "unknown"
@@ -23,14 +28,19 @@ func main() {
 
 	debugFlag := flag.Bool("d", false, "enable debug logging")
 
+	mode := flag.String("m", StationModeEsp, "station mode (esp/rpi)")
+
 	espHost := flag.String("h", "OpenAir.local", "ESP station address")
 	espPort := flag.Int("p", 80, "ESP station port")
+
+	rpiI2cBusId := flag.Int("i", 1, "RPi station I2C bus ID")
+	rpiSerialPort := flag.String("s", "/dev/ttyAMA0", "RPi station serial port name")
 
 	apiServerUrl := flag.String("a", "https://api.openair.city/v1/feeder", "feeder endpoint address")
 
 	updatePeriod := flag.Duration("t", 1*time.Minute, "data update period")
 
-	settleTime := flag.Duration("S", 5*time.Minute, "data settle time after ESP station reboot")
+	settleTime := flag.Duration("S", 5*time.Minute, "data settle time after station restart")
 
 	resolverTimeout := flag.Duration("r", 15*time.Second, "name resolver timeout")
 
@@ -49,10 +59,6 @@ func main() {
 	if *debugFlag {
 		log.SetLevel(log.DebugLevel)
 	}
-
-	version := fmt.Sprintf("esp-%s_%s-%s_%s", Version, Timestamp, runtime.GOARCH, runtime.GOOS)
-
-	log.Printf("starting station, version: %s", version)
 
 	InitResolvers(*resolverTimeout)
 
@@ -83,7 +89,24 @@ func main() {
 		}
 	}()
 
-	RunStation(ctx, version, *espHost, *espPort, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
+	var station Station
+
+	if *mode == StationModeEsp {
+		station = NewEspStation(*espHost, *espPort)
+	} else if *mode == StationModeRpi {
+		var err error
+		if station, err = NewRpiStation(*rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
+			log.Fatalf("can't initialize RPi station: %v", err)
+		}
+	} else {
+		log.Fatalf("unknown station mode: %s", *mode)
+	}
+
+	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
+
+	log.Printf("starting station, version: %s", version)
+
+	RunStation(ctx, station, version, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }

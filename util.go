@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"strings"
 )
 
@@ -37,6 +38,18 @@ func ParseAddr(addr string) (host, port string) {
 	}
 
 	return e[0], e[1]
+}
+
+// Get wireless interface (with name starting with 'wl') MAC address
+// or empty string if no wireless interface found
+func WirelessInterfaceMacAddr() string {
+	interfaces, _ := net.Interfaces()
+	for _, iface := range interfaces {
+		if strings.HasPrefix(iface.Name, "wl") {
+			return iface.HardwareAddr.String()
+		}
+	}
+	return ""
 }
 
 // Compute SHA1 checksum for given string
