@@ -17,6 +17,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"time"
 )
@@ -36,7 +38,16 @@ func GetData(url string, res interface{}) error {
 	}
 	defer CloseQuietly(r.Body)
 
-	return json.NewDecoder(r.Body).Decode(&res)
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+
+	if r.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP error %d, response:\n%s", r.StatusCode, b)
+	}
+
+	return json.Unmarshal(b, &res)
 }
 
 func PostData(url string, data, res interface{}) error {
