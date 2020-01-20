@@ -91,22 +91,26 @@ func main() {
 
 	var station Station
 
+	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
+
 	if *mode == StationModeEsp {
-		station = NewEspStation(*espHost, *espPort)
+		station = NewEspStation(version, *espHost, *espPort)
 	} else if *mode == StationModeRpi {
 		var err error
-		if station, err = NewRpiStation(*rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
+		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
 			log.Fatalf("can't initialize RPi station: %v", err)
 		}
 	} else {
 		log.Fatalf("unknown station mode: %s", *mode)
 	}
 
-	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
-
 	log.Printf("starting station, version: %s", version)
 
-	RunStation(ctx, station, version, *apiServerUrl, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
+	endpoints := []Endpoint{
+		NewOpenAirEndpoint(*apiServerUrl),
+	}
+
+	RunStation(ctx, station, endpoints, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }

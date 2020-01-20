@@ -31,7 +31,7 @@ func InitHttp(timeout time.Duration) {
 	}
 }
 
-func GetData(url string, res interface{}) error {
+func HttpGetData(url string, res interface{}) error {
 	r, err := httpClient.Get(url)
 	if err != nil {
 		return err
@@ -50,7 +50,7 @@ func GetData(url string, res interface{}) error {
 	return json.Unmarshal(b, &res)
 }
 
-func PostData(url string, data, res interface{}) error {
+func HttpPostData(url string, data, res interface{}) error {
 	jd, err := json.Marshal(data)
 	if err != nil {
 		return err

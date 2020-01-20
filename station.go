@@ -40,27 +40,36 @@ import (
 const systemEpoch = 1546300800
 
 type StationData struct {
+	Version         string
 	TokenId         string
 	Uptime          time.Duration
 	LastMeasurement *api.Measurement
 }
 
 type Station interface {
+	Version() string
 	Start() error
 	Stop()
 	GetData() (*StationData, error)
 }
 
 type EspStation struct {
+	version string
+
 	host string
 	port int
 }
 
-func NewEspStation(host string, port int) *EspStation {
+func NewEspStation(version, host string, port int) *EspStation {
 	return &EspStation{
-		host: host,
-		port: port,
+		version: version,
+		host:    host,
+		port:    port,
 	}
+}
+
+func (es *EspStation) Version() string {
+	return es.version
 }
 
 func (es *EspStation) Start() error {
@@ -78,7 +87,7 @@ func (es *EspStation) GetData() (*StationData, error) {
 	log.Debugf("getting sensor data from ESP station %s", url)
 
 	var data EspData
-	if err := GetData(url, &data); err != nil {
+	if err := HttpGetData(url, &data); err != nil {
 		log.Errorf("sensor data request failed: %v", err)
 		return nil, err
 	}
@@ -88,6 +97,7 @@ func (es *EspStation) GetData() (*StationData, error) {
 	m := data.Measurement(api.UnixTime(time.Now()))
 
 	return &StationData{
+		Version:         es.version,
 		TokenId:         stationTokenId(data.WiFi.MacAddress()),
 		Uptime:          time.Duration(data.System.Uptime) * time.Minute,
 		LastMeasurement: m,
@@ -95,6 +105,8 @@ func (es *EspStation) GetData() (*StationData, error) {
 }
 
 type RpiStation struct {
+	version string
+
 	i2cBusId          int
 	bmeSensorAddress  int
 	sdsSensorPort     string
@@ -115,12 +127,14 @@ type RpiStation struct {
 	pm10   float32
 }
 
-func NewRpiStation(i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sdsSensorInterval int) (*RpiStation, error) {
+func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string,
+	sdsSensorInterval int) (*RpiStation, error) {
 	macAddress := WirelessInterfaceMacAddr()
 	if macAddress == "" {
 		return nil, errors.New("can't determine station MAC address")
 	}
 	return &RpiStation{
+		version:           version,
 		startTime:         time.Now(),
 		macAddress:        macAddress,
 		tokenId:           stationTokenId(macAddress),
@@ -129,6 +143,10 @@ func NewRpiStation(i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sds
 		sdsSensorPort:     sdsSensorPort,
 		sdsSensorInterval: sdsSensorInterval,
 	}, nil
+}
+
+func (rs *RpiStation) Version() string {
+	return rs.version
 }
 
 func (rs *RpiStation) Start() error {
@@ -266,14 +284,15 @@ func (rs *RpiStation) GetData() (*StationData, error) {
 	}
 
 	return &StationData{
+		Version:         rs.version,
 		TokenId:         rs.tokenId,
 		Uptime:          time.Since(rs.startTime),
 		LastMeasurement: m,
 	}, nil
 }
 
-func RunStation(ctx context.Context, station Station, version string, apiServerUrl string,
-	updatePeriod time.Duration, settleTime time.Duration, disablePmCorrectionFlag bool) {
+func RunStation(ctx context.Context, station Station, endpoints []Endpoint, updatePeriod time.Duration,
+	settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
 	if err := station.Start(); err != nil {
@@ -317,23 +336,8 @@ func RunStation(ctx context.Context, station Station, version string, apiServerU
 				Float32RefToString(m.Temperature), Float32RefToString(m.Humidity), Float32RefToString(m.Pressure),
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
 
-			f := api.FeederData{
-				TokenId:      data.TokenId,
-				Version:      version,
-				Measurements: []api.Measurement{*m},
-			}
-
-			log.Debugf("posting data to %s: %+v", apiServerUrl, f)
-
-			var r api.Result
-
-			err = PostData(apiServerUrl, f, &r)
-			if err != nil {
-				log.Errorf("data posting failed: %v", err)
-				continue
-			}
-			if r.Status != api.StatusOk {
-				log.Errorf("data posting error: %d: %s", r.Status, r.Message)
+			for _, ep := range endpoints {
+				ep.FeedStationData(data)
 			}
 
 		case <-ctx.Done():
