@@ -40,6 +40,8 @@ func main() {
 
 	updatePeriod := flag.Duration("t", 1*time.Minute, "data update period")
 
+	keepDuration := flag.Duration("k", 6*time.Hour, "buffered data keep duration")
+
 	settleTime := flag.Duration("S", 5*time.Minute, "data settle time after station restart")
 
 	resolverTimeout := flag.Duration("r", 15*time.Second, "name resolver timeout")
@@ -107,7 +109,7 @@ func main() {
 	log.Printf("starting station, version: %s", version)
 
 	endpoints := []Endpoint{
-		NewOpenAirEndpoint(*apiServerUrl),
+		NewOpenAirEndpoint(*apiServerUrl, *keepDuration),
 	}
 
 	RunStation(ctx, station, endpoints, *updatePeriod, *settleTime, *disablePmCorrectionFlag)

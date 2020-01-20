@@ -16,6 +16,7 @@ package main
 
 import (
 	log "github.com/sirupsen/logrus"
+	"time"
 
 	"github.com/openairtech/api"
 )
@@ -25,33 +26,60 @@ type Endpoint interface {
 }
 
 type OpenAirEndpoint struct {
-	apiServerUrl string
+	apiServerUrl             string
+	measurementsKeepDuration time.Duration
+
+	measurements []api.Measurement
 }
 
-func NewOpenAirEndpoint(apiServerUrl string) *OpenAirEndpoint {
+func NewOpenAirEndpoint(apiServerUrl string, measurementsKeepDuration time.Duration) *OpenAirEndpoint {
 	return &OpenAirEndpoint{
-		apiServerUrl: apiServerUrl,
+		apiServerUrl:             apiServerUrl,
+		measurementsKeepDuration: measurementsKeepDuration,
 	}
 }
 
 func (oae *OpenAirEndpoint) FeedStationData(data *StationData) {
-	m := data.LastMeasurement
+	// Delete expired buffered measurements
+	now := time.Now()
+	for {
+		if len(oae.measurements) == 0 {
+			break
+		}
+
+		// Stop on first unexpired buffered measurement
+		t := oae.measurements[0].Timestamp
+		if t != nil && now.Sub(time.Time(*t)) < oae.measurementsKeepDuration {
+			break
+		}
+
+		// Remove expired buffered measurement
+		oae.measurements = oae.measurements[1:]
+	}
+
+	// Add last data measurement to buffered measurements
+	oae.measurements = append(oae.measurements, *data.LastMeasurement)
 
 	f := api.FeederData{
 		TokenId:      data.TokenId,
 		Version:      data.Version,
-		Measurements: []api.Measurement{*m},
+		Measurements: oae.measurements,
 	}
 
-	log.Debugf("[OpenAir] posting data to %s: %+v", oae.apiServerUrl, f)
+	log.Debugf("[OpenAir] posting %d measurement(s) to %s", len(oae.measurements), oae.apiServerUrl)
 
 	var r api.Result
-
 	if err := HttpPostData(oae.apiServerUrl, f, &r); err != nil {
 		log.Errorf("[OpenAir] data posting failed: %v", err)
 		return
 	}
 	if r.Status != api.StatusOk {
 		log.Errorf("[OpenAir] data posting error: %d: %s", r.Status, r.Message)
+		return
 	}
+
+	log.Debugf("[OpenAir] successfully posted %d measurement(s) to %s", len(oae.measurements), oae.apiServerUrl)
+
+	// Delete successfully posted buffered measurements
+	oae.measurements = nil
 }
