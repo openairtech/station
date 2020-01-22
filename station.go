@@ -291,7 +291,7 @@ func (rs *RpiStation) GetData() (*StationData, error) {
 	}, nil
 }
 
-func RunStation(ctx context.Context, station Station, feeders []Feeder, updatePeriod time.Duration,
+func RunStation(ctx context.Context, station Station, feeders []Feeder, updateInterval time.Duration,
 	settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
@@ -305,7 +305,7 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updatePe
 	for {
 		select {
 		case <-time.After(p):
-			p = updatePeriod
+			p = updateInterval
 
 			data, err := station.GetData()
 			if err != nil {

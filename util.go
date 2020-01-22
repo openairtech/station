@@ -62,14 +62,22 @@ func Sha1(s string) string {
 // Convert reference to float32 to its string representation
 func Float32RefToString(r *float32) string {
 	if r == nil {
-		return "<none>"
+		return ""
 	}
 
 	return fmt.Sprintf("%.1f", *r)
 }
 
-// Round float32 x to given number of decimal places
+// Round float32 to given number of decimal places
 func Float32Round(x float32, places int) float32 {
 	pow := math.Pow(10, float64(places))
 	return float32(math.Round(pow*float64(x)) / pow)
+}
+
+// Round referenced float32 to given number of decimal places
+func Float32RefRound(r *float32, places int) float32 {
+	if r == nil {
+		return 0
+	}
+	return Float32Round(*r, places)
 }

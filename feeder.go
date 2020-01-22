@@ -15,6 +15,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	log "github.com/sirupsen/logrus"
 	"time"
 
@@ -39,37 +41,37 @@ func NewOpenAirFeeder(apiServerUrl string, measurementsKeepDuration time.Duratio
 	}
 }
 
-func (oae *OpenAirFeeder) Feed(data *StationData) {
+func (oaf *OpenAirFeeder) Feed(data *StationData) {
 	// Delete expired buffered measurements
 	now := time.Now()
 	for {
-		if len(oae.measurements) == 0 {
+		if len(oaf.measurements) == 0 {
 			break
 		}
 
 		// Stop on first unexpired buffered measurement
-		t := oae.measurements[0].Timestamp
-		if t != nil && now.Sub(time.Time(*t)) < oae.measurementsKeepDuration {
+		t := oaf.measurements[0].Timestamp
+		if t != nil && now.Sub(time.Time(*t)) < oaf.measurementsKeepDuration {
 			break
 		}
 
 		// Remove expired buffered measurement
-		oae.measurements = oae.measurements[1:]
+		oaf.measurements = oaf.measurements[1:]
 	}
 
 	// Add last data measurement to buffered measurements
-	oae.measurements = append(oae.measurements, *data.LastMeasurement)
+	oaf.measurements = append(oaf.measurements, *data.LastMeasurement)
 
 	f := api.FeederData{
 		TokenId:      data.TokenId,
 		Version:      data.Version,
-		Measurements: oae.measurements,
+		Measurements: oaf.measurements,
 	}
 
-	log.Debugf("[OpenAir] posting %d measurement(s) to %s", len(oae.measurements), oae.apiServerUrl)
+	log.Debugf("[OpenAir] posting %d measurement(s) to %s", len(oaf.measurements), oaf.apiServerUrl)
 
 	var r api.Result
-	if err := HttpPostData(oae.apiServerUrl, f, &r); err != nil {
+	if err := HttpPostData(oaf.apiServerUrl, nil, f, &r); err != nil {
 		log.Errorf("[OpenAir] data posting failed: %v", err)
 		return
 	}
@@ -78,8 +80,78 @@ func (oae *OpenAirFeeder) Feed(data *StationData) {
 		return
 	}
 
-	log.Debugf("[OpenAir] successfully posted %d measurement(s) to %s", len(oae.measurements), oae.apiServerUrl)
+	log.Debugf("[OpenAir] successfully posted %d measurement(s) to %s", len(oaf.measurements), oaf.apiServerUrl)
 
 	// Delete successfully posted buffered measurements
-	oae.measurements = nil
+	oaf.measurements = nil
+}
+
+type LuftdatenFeeder struct {
+	apiServerUrl           string
+	sensorDataPostInterval time.Duration
+
+	lastSensorDataPostTime time.Time
+}
+
+type LuftdatenSensorData struct {
+	SoftwareVersion  string                     `json:"software_version"`
+	SensorDataValues []LuftdatenSensorDataValue `json:"sensordatavalues"`
+}
+type LuftdatenSensorDataValue struct {
+	ValueType string  `json:"value_type"`
+	Value     float32 `json:"value"`
+}
+
+func NewLuftdatenFeeder() *LuftdatenFeeder {
+	return &LuftdatenFeeder{
+		apiServerUrl:           "https://api.luftdaten.info/v1/push-sensor-data/",
+		sensorDataPostInterval: 3 * time.Minute,
+	}
+}
+
+func (lf *LuftdatenFeeder) Feed(data *StationData) {
+	sensorId := fmt.Sprintf("raspi-%s", data.TokenId[:12])
+
+	if time.Since(lf.lastSensorDataPostTime) < lf.sensorDataPostInterval {
+		log.Debugf("[Luftdaten] %s: skip sensor data posting", sensorId)
+		return
+	}
+
+	pmSensorData := &LuftdatenSensorData{
+		SoftwareVersion: data.Version,
+		SensorDataValues: []LuftdatenSensorDataValue{
+			{ValueType: "P1", Value: Float32RefRound(data.LastMeasurement.Pm10, 1)},
+			{ValueType: "P2", Value: Float32RefRound(data.LastMeasurement.Pm25, 1)},
+		},
+	}
+	lf.postSensorData(sensorId, 1, pmSensorData)
+
+	envSensorData := &LuftdatenSensorData{
+		SoftwareVersion: data.Version,
+		SensorDataValues: []LuftdatenSensorDataValue{
+			{ValueType: "temperature", Value: Float32RefRound(data.LastMeasurement.Temperature, 1)},
+			{ValueType: "humidity", Value: Float32RefRound(data.LastMeasurement.Humidity, 1)},
+			{ValueType: "pressure", Value: 100 * Float32RefRound(data.LastMeasurement.Pressure, 2)},
+		},
+	}
+	lf.postSensorData(sensorId, 11, envSensorData)
+
+	lf.lastSensorDataPostTime = time.Now()
+}
+
+func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensorData *LuftdatenSensorData) {
+	log.Debugf("[Luftdaten] %s: posting sensor [%d] data to %s", sensorId, sensorPin, lf.apiServerUrl)
+
+	headers := map[string]interface{}{
+		"X-Sensor": sensorId,
+		"X-Pin":    sensorPin,
+	}
+
+	var r map[string]*json.RawMessage
+	if err := HttpPostData(lf.apiServerUrl, headers, sensorData, &r); err != nil {
+		log.Errorf("[Luftdaten] %s: sensor [%d] data posting failed: %v", sensorId, sensorPin, err)
+		return
+	}
+
+	log.Debugf("[Luftdaten] %s: successfully posted sensor [%d] data", sensorId, sensorPin)
 }
