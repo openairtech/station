@@ -108,11 +108,11 @@ func main() {
 
 	log.Printf("starting station, version: %s", version)
 
-	endpoints := []Endpoint{
-		NewOpenAirEndpoint(*apiServerUrl, *keepDuration),
+	feeders := []Feeder{
+		NewOpenAirFeeder(*apiServerUrl, *keepDuration),
 	}
 
-	RunStation(ctx, station, endpoints, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
+	RunStation(ctx, station, feeders, *updatePeriod, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }

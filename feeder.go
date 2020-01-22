@@ -21,25 +21,25 @@ import (
 	"github.com/openairtech/api"
 )
 
-type Endpoint interface {
-	FeedStationData(data *StationData)
+type Feeder interface {
+	Feed(data *StationData)
 }
 
-type OpenAirEndpoint struct {
+type OpenAirFeeder struct {
 	apiServerUrl             string
 	measurementsKeepDuration time.Duration
 
 	measurements []api.Measurement
 }
 
-func NewOpenAirEndpoint(apiServerUrl string, measurementsKeepDuration time.Duration) *OpenAirEndpoint {
-	return &OpenAirEndpoint{
+func NewOpenAirFeeder(apiServerUrl string, measurementsKeepDuration time.Duration) *OpenAirFeeder {
+	return &OpenAirFeeder{
 		apiServerUrl:             apiServerUrl,
 		measurementsKeepDuration: measurementsKeepDuration,
 	}
 }
 
-func (oae *OpenAirEndpoint) FeedStationData(data *StationData) {
+func (oae *OpenAirFeeder) Feed(data *StationData) {
 	// Delete expired buffered measurements
 	now := time.Now()
 	for {

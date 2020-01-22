@@ -291,7 +291,7 @@ func (rs *RpiStation) GetData() (*StationData, error) {
 	}, nil
 }
 
-func RunStation(ctx context.Context, station Station, endpoints []Endpoint, updatePeriod time.Duration,
+func RunStation(ctx context.Context, station Station, feeders []Feeder, updatePeriod time.Duration,
 	settleTime time.Duration, disablePmCorrectionFlag bool) {
 	p := time.Duration(0)
 
@@ -336,8 +336,8 @@ func RunStation(ctx context.Context, station Station, endpoints []Endpoint, upda
 				Float32RefToString(m.Temperature), Float32RefToString(m.Humidity), Float32RefToString(m.Pressure),
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
 
-			for _, ep := range endpoints {
-				ep.FeedStationData(data)
+			for _, feeder := range feeders {
+				feeder.Feed(data)
 			}
 
 		case <-ctx.Done():
