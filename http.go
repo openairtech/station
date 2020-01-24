@@ -43,42 +43,55 @@ func HttpGetData(url string, res interface{}) error {
 		return err
 	}
 
-	if r.StatusCode != http.StatusOK {
+	if r.StatusCode < http.StatusOK || r.StatusCode > http.StatusIMUsed {
 		return fmt.Errorf("%d: %s", r.StatusCode, b)
 	}
 
 	return json.Unmarshal(b, &res)
 }
 
-func HttpPostData(url string, headers map[string]interface{}, data, res interface{}) error {
-	jd, err := json.Marshal(data)
+func HttpPostData(url string, headers map[string]interface{}, d []byte) ([]byte, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(d))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jd))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
 		req.Header.Add(k, fmt.Sprintf("%v", v))
 	}
 
 	r, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer CloseQuietly(r.Body)
 
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if r.StatusCode < http.StatusOK || r.StatusCode > http.StatusIMUsed {
-		return fmt.Errorf("%d: %s", r.StatusCode, b)
+		return nil, fmt.Errorf("%d: %s", r.StatusCode, b)
+	}
+
+	return b, nil
+}
+
+func HttpPostJson(url string, headers map[string]interface{}, j, res interface{}) error {
+	jd, err := json.Marshal(j)
+	if err != nil {
+		return err
+	}
+
+	if headers == nil {
+		headers = make(map[string]interface{})
+	}
+	headers["Content-Type"] = "application/json"
+
+	b, err := HttpPostData(url, headers, jd)
+	if err != nil {
+		return err
 	}
 
 	return json.Unmarshal(b, &res)

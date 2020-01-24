@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/openairtech/api"
@@ -27,6 +29,7 @@ type Feeder interface {
 	Feed(data *StationData)
 }
 
+// https://github.com/openairtech/api
 type OpenAirFeeder struct {
 	apiServerUrl             string
 	measurementsKeepDuration time.Duration
@@ -71,7 +74,7 @@ func (oaf *OpenAirFeeder) Feed(data *StationData) {
 	log.Debugf("[OpenAir] posting %d measurement(s) to %s", len(oaf.measurements), oaf.apiServerUrl)
 
 	var r api.Result
-	if err := HttpPostData(oaf.apiServerUrl, nil, f, &r); err != nil {
+	if err := HttpPostJson(oaf.apiServerUrl, nil, f, &r); err != nil {
 		log.Errorf("[OpenAir] data posting failed: %v", err)
 		return
 	}
@@ -86,20 +89,23 @@ func (oaf *OpenAirFeeder) Feed(data *StationData) {
 	oaf.measurements = nil
 }
 
+type SensorDataValue struct {
+	ValueType string  `json:"value_type"`
+	Value     float32 `json:"value"`
+}
+
+type SensorData struct {
+	SoftwareVersion  string            `json:"software_version"`
+	SensorDataValues []SensorDataValue `json:"sensordatavalues"`
+}
+
+// https://github.com/opendata-stuttgart/meta/wiki/APIs
+// https://github.com/opendata-stuttgart/sensors-software/blob/master/airrohr-firmware/airrohr-firmware.ino
 type LuftdatenFeeder struct {
 	apiServerUrl           string
 	sensorDataPostInterval time.Duration
 
 	lastSensorDataPostTime time.Time
-}
-
-type LuftdatenSensorData struct {
-	SoftwareVersion  string                     `json:"software_version"`
-	SensorDataValues []LuftdatenSensorDataValue `json:"sensordatavalues"`
-}
-type LuftdatenSensorDataValue struct {
-	ValueType string  `json:"value_type"`
-	Value     float32 `json:"value"`
 }
 
 func NewLuftdatenFeeder() *LuftdatenFeeder {
@@ -117,18 +123,18 @@ func (lf *LuftdatenFeeder) Feed(data *StationData) {
 		return
 	}
 
-	pmSensorData := &LuftdatenSensorData{
+	pmSensorData := &SensorData{
 		SoftwareVersion: data.Version,
-		SensorDataValues: []LuftdatenSensorDataValue{
+		SensorDataValues: []SensorDataValue{
 			{ValueType: "P1", Value: Float32RefRound(data.LastMeasurement.Pm10, 1)},
 			{ValueType: "P2", Value: Float32RefRound(data.LastMeasurement.Pm25, 1)},
 		},
 	}
 	lf.postSensorData(sensorId, 1, pmSensorData)
 
-	envSensorData := &LuftdatenSensorData{
+	envSensorData := &SensorData{
 		SoftwareVersion: data.Version,
-		SensorDataValues: []LuftdatenSensorDataValue{
+		SensorDataValues: []SensorDataValue{
 			{ValueType: "temperature", Value: Float32RefRound(data.LastMeasurement.Temperature, 1)},
 			{ValueType: "humidity", Value: Float32RefRound(data.LastMeasurement.Humidity, 1)},
 			{ValueType: "pressure", Value: 100 * Float32RefRound(data.LastMeasurement.Pressure, 2)},
@@ -139,7 +145,7 @@ func (lf *LuftdatenFeeder) Feed(data *StationData) {
 	lf.lastSensorDataPostTime = time.Now()
 }
 
-func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensorData *LuftdatenSensorData) {
+func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensorData *SensorData) {
 	log.Debugf("[Luftdaten] %s: posting sensor [%d] data to %s", sensorId, sensorPin, lf.apiServerUrl)
 
 	headers := map[string]interface{}{
@@ -148,10 +154,84 @@ func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensor
 	}
 
 	var r map[string]*json.RawMessage
-	if err := HttpPostData(lf.apiServerUrl, headers, sensorData, &r); err != nil {
+	if err := HttpPostJson(lf.apiServerUrl, headers, sensorData, &r); err != nil {
 		log.Errorf("[Luftdaten] %s: sensor [%d] data posting failed: %v", sensorId, sensorPin, err)
 		return
 	}
 
 	log.Debugf("[Luftdaten] %s: successfully posted sensor [%d] data", sensorId, sensorPin)
+}
+
+// https://github.com/zakarlyukin/aircms/blob/master/docs/index.rst
+type AirCmsFeeder struct {
+	apiServerUrl           string
+	sensorDataPostInterval time.Duration
+
+	lastSensorDataPostTime time.Time
+}
+
+func NewAirCmsFeederFeeder() *AirCmsFeeder {
+	return &AirCmsFeeder{
+		apiServerUrl:           "http://doiot.ru/php/sensors.php",
+		sensorDataPostInterval: 3 * time.Minute,
+	}
+}
+
+func (acf *AirCmsFeeder) Feed(data *StationData) {
+	l, err := strconv.ParseInt(data.TokenId[12:20], 16, 64)
+	if err != nil {
+		log.Errorf("[AirCMS] can't get login from token %s: %v", data.TokenId, err)
+		return
+	}
+	login := strconv.FormatInt(l, 10)
+
+	if time.Since(acf.lastSensorDataPostTime) < acf.sensorDataPostInterval {
+		log.Debugf("[AirCMS] %s: skip sensor data posting", login)
+		return
+	}
+
+	token := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
+		data.TokenId[0:2], data.TokenId[2:4], data.TokenId[4:6],
+		data.TokenId[6:8], data.TokenId[8:10], data.TokenId[10:12])
+	token = strings.ToUpper(token)
+
+	sensorData := &SensorData{
+		SoftwareVersion: data.Version,
+		SensorDataValues: []SensorDataValue{
+			{ValueType: "SDS_P1", Value: Float32RefRound(data.LastMeasurement.Pm10, 1)},
+			{ValueType: "SDS_P2", Value: Float32RefRound(data.LastMeasurement.Pm25, 1)},
+			{ValueType: "BME280_temperature", Value: Float32RefRound(data.LastMeasurement.Temperature, 1)},
+			{ValueType: "BME280_humidity", Value: Float32RefRound(data.LastMeasurement.Humidity, 1)},
+			{ValueType: "BME280_pressure", Value: 100 * Float32RefRound(data.LastMeasurement.Pressure, 2)},
+		},
+	}
+
+	jd, err := json.Marshal(sensorData)
+	if err != nil {
+		log.Errorf("[AirCMS] %s: can't marshal sensor data: %v", login, err)
+		return
+	}
+
+	var timestamp time.Time
+	if data.LastMeasurement.Timestamp != nil {
+		timestamp = time.Time(*data.LastMeasurement.Timestamp)
+	} else {
+		timestamp = time.Now()
+	}
+
+	d := fmt.Sprintf("L=%s&t=%d&airrohr=%s", login, timestamp.Unix(), string(jd))
+	log.Debugf("[AirCMS] %s: data to post: %s", login, d)
+
+	postUrl := fmt.Sprintf("%s?h=%s", acf.apiServerUrl, Sha1(Sha1(token)+Sha1(d+token)))
+	log.Debugf("[AirCMS] %s: posting sensor data to %s, token: %s", login, acf.apiServerUrl, token)
+
+	var r []byte
+	if r, err = HttpPostData(postUrl, nil, []byte(d)); err != nil {
+		log.Errorf("[AirCMS] %s: sensor data posting failed: %v", login, err)
+		return
+	}
+
+	log.Debugf("[AirCMS] %s: successfully posted sensor data, response: %s", login, string(r))
+
+	acf.lastSensorDataPostTime = time.Now()
 }

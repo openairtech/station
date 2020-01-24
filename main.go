@@ -111,6 +111,7 @@ func main() {
 	feeders := []Feeder{
 		NewOpenAirFeeder(*apiServerUrl, *keepDuration),
 		NewLuftdatenFeeder(),
+		NewAirCmsFeederFeeder(),
 	}
 
 	RunStation(ctx, station, feeders, *updateInterval, *settleTime, *disablePmCorrectionFlag)
