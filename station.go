@@ -96,9 +96,12 @@ func (es *EspStation) GetData() (*StationData, error) {
 
 	m := data.Measurement(api.UnixTime(time.Now()))
 
+	tokenId := stationTokenId(data.WiFi.MacAddress())
+	log.Debugf("token ID: %s", tokenId)
+
 	return &StationData{
 		Version:         es.version,
-		TokenId:         stationTokenId(data.WiFi.MacAddress()),
+		TokenId:         tokenId,
 		Uptime:          time.Duration(data.System.Uptime) * time.Minute,
 		LastMeasurement: m,
 	}, nil
@@ -131,13 +134,18 @@ func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensor
 	sdsSensorInterval int) (*RpiStation, error) {
 	macAddress := WirelessInterfaceMacAddr()
 	if macAddress == "" {
-		return nil, errors.New("can't determine station MAC address")
+		return nil, errors.New("can't determine RPi station MAC address")
 	}
+
+	tokenId := stationTokenId(macAddress)
+	log.Debugf("MAC address: %s", macAddress)
+	log.Debugf("token ID: %s", tokenId)
+
 	return &RpiStation{
 		version:           version,
 		startTime:         time.Now(),
 		macAddress:        macAddress,
-		tokenId:           stationTokenId(macAddress),
+		tokenId:           tokenId,
 		i2cBusId:          i2cBusId,
 		bmeSensorAddress:  bmeSensorAddress,
 		sdsSensorPort:     sdsSensorPort,

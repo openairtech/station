@@ -54,7 +54,7 @@ func main() {
 
 	debugFlag := flag.Bool("d", false, "enable debug logging")
 
-	mode := flag.String("m", string(StationModeEsp), fmt.Sprintf("station mode (%s)",
+	mode := flag.String("m", StationModeEsp, fmt.Sprintf("station mode (%s)",
 		SliceToString(StationModeList())))
 
 	espHost := flag.String("h", "OpenAir.local", "ESP station address")
@@ -96,6 +96,14 @@ func main() {
 		log.SetLevel(log.DebugLevel)
 	}
 
+	if !StringInSlice(*mode, StationModeList()) {
+		log.Fatalf("invalid station mode: %s", *mode)
+	}
+
+	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
+
+	log.Printf("initializing station %s", version)
+
 	InitResolvers(*resolverTimeout)
 
 	InitHttp(*httpTimeout)
@@ -125,21 +133,6 @@ func main() {
 		}
 	}()
 
-	var station Station
-
-	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
-
-	if *mode == StationModeEsp {
-		station = NewEspStation(version, *espHost, *espPort)
-	} else if *mode == StationModeRpi {
-		var err error
-		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
-			log.Fatalf("can't initialize RPi station: %v", err)
-		}
-	} else {
-		log.Fatalf("unknown station mode: %s", *mode)
-	}
-
 	feeders := map[string]Feeder{
 		FeederOpenAir:   NewOpenAirFeeder(*apiServerUrl, *keepDuration),
 		FeederLuftdaten: NewLuftdatenFeeder(),
@@ -158,7 +151,17 @@ func main() {
 		efn = append(efn, n)
 	}
 
-	log.Printf("starting station %s, enabled feeders: [%s]", version, SliceToString(efn))
+	log.Debugf("enabled feeders: [%s]", SliceToString(efn))
+
+	var station Station
+	if *mode == StationModeEsp {
+		station = NewEspStation(version, *espHost, *espPort)
+	} else {
+		var err error
+		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
+			log.Fatalf("can't initialize RPi station: %v", err)
+		}
+	}
 
 	RunStation(ctx, station, ef, *updateInterval, *settleTime, *disablePmCorrectionFlag)
 
