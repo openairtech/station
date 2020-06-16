@@ -313,19 +313,6 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updateIn
 				continue
 			}
 
-			log.Debugf("station data: %+v", data)
-
-			if time.Now().Before(time.Unix(systemEpoch, 0)) {
-				log.Info("skipping station data posting since station system time probably is not in sync")
-				continue
-			}
-
-			if data.Uptime < settleTime {
-				log.Infof("skipping station data posting since station uptime (%+v) is "+
-					"shorter than data settle time (%+v)", data.Uptime, settleTime)
-				continue
-			}
-
 			m := data.LastMeasurement
 
 			if !disablePmCorrectionFlag {
@@ -335,6 +322,21 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updateIn
 			log.Debugf("temperature: %s, humidity: %s, pressure: %s, pm2.5: %s, pm10: %s",
 				Float32RefToString(m.Temperature), Float32RefToString(m.Humidity), Float32RefToString(m.Pressure),
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
+
+			if len(feeders) == 0 {
+				continue
+			}
+
+			if time.Now().Before(time.Unix(systemEpoch, 0)) {
+				log.Info("skipping station data feeding since station system time probably is not in sync")
+				continue
+			}
+
+			if data.Uptime < settleTime {
+				log.Infof("skipping station data feeding since station uptime (%+v) is "+
+					"shorter than data settle time (%+v)", data.Uptime, settleTime)
+				continue
+			}
 
 			for _, feeder := range feeders {
 				feeder.Feed(data)
