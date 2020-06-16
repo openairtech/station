@@ -18,17 +18,44 @@ const (
 	StationModeRpi = "rpi"
 )
 
+func StationModeList() []string {
+	return []string{StationModeEsp, StationModeRpi}
+}
+
+const (
+	FeederAll       = "all"
+	FeederOpenAir   = "openair"
+	FeederLuftdaten = "luftdaten"
+	FeederAirCms    = "aircms"
+)
+
+func FeederNameList() []string {
+	return []string{FeederAll, FeederOpenAir, FeederLuftdaten, FeederAirCms}
+}
+
 var (
 	Version   = "unknown"
 	Timestamp = "unknown"
 )
+
+type stringArray []string
+
+func (s *stringArray) String() string {
+	return fmt.Sprintf("stringArray{%s}", SliceToString(*s))
+}
+
+func (s *stringArray) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
 
 func main() {
 	versionFlag := flag.Bool("v", false, "print the version number and quit")
 
 	debugFlag := flag.Bool("d", false, "enable debug logging")
 
-	mode := flag.String("m", StationModeEsp, "station mode (esp/rpi)")
+	mode := flag.String("m", string(StationModeEsp), fmt.Sprintf("station mode (%s)",
+		SliceToString(StationModeList())))
 
 	espHost := flag.String("h", "OpenAir.local", "ESP station address")
 	espPort := flag.Int("p", 80, "ESP station port")
@@ -36,7 +63,8 @@ func main() {
 	rpiI2cBusId := flag.Int("i", 1, "RPi station I2C bus ID")
 	rpiSerialPort := flag.String("s", "/dev/ttyAMA0", "RPi station serial port name")
 
-	apiServerUrl := flag.String("a", "https://api.openair.city/v1/feeder", "feeder endpoint address")
+	apiServerUrl := flag.String("a", "https://api.openair.city/v1/feeder",
+		"OpenAir feeder endpoint address")
 
 	updateInterval := flag.Duration("t", 1*time.Minute, "data update interval")
 
@@ -49,6 +77,12 @@ func main() {
 	httpTimeout := flag.Duration("T", 15*time.Second, "http client timeout")
 
 	disablePmCorrectionFlag := flag.Bool("c", false, "disable PM values correction by humidity")
+
+	fnl := SliceToString(FeederNameList())
+	enabledFeeders := stringArray{}
+	flag.Var(&enabledFeeders, "E", fmt.Sprintf("enable feeder (%s)", fnl))
+	disabledFeeders := stringArray{}
+	flag.Var(&disabledFeeders, "D", fmt.Sprintf("disable feeder (%s)", fnl))
 
 	flag.Parse()
 
@@ -106,15 +140,27 @@ func main() {
 		log.Fatalf("unknown station mode: %s", *mode)
 	}
 
-	log.Printf("starting station, version: %s", version)
-
-	feeders := []Feeder{
-		NewOpenAirFeeder(*apiServerUrl, *keepDuration),
-		NewLuftdatenFeeder(),
-		NewAirCmsFeederFeeder(),
+	feeders := map[string]Feeder{
+		FeederOpenAir:   NewOpenAirFeeder(*apiServerUrl, *keepDuration),
+		FeederLuftdaten: NewLuftdatenFeeder(),
+		FeederAirCms:    NewAirCmsFeederFeeder(),
 	}
 
-	RunStation(ctx, station, feeders, *updateInterval, *settleTime, *disablePmCorrectionFlag)
+	var ef []Feeder
+	var efn []string
+
+	for n, f := range feeders {
+		if (StringInSlice(FeederAll, disabledFeeders) || StringInSlice(n, disabledFeeders)) &&
+			!(StringInSlice(FeederAll, enabledFeeders) || StringInSlice(n, enabledFeeders)) {
+			continue
+		}
+		ef = append(ef, f)
+		efn = append(efn, n)
+	}
+
+	log.Printf("starting station %s, enabled feeders: [%s]", version, SliceToString(efn))
+
+	RunStation(ctx, station, ef, *updateInterval, *settleTime, *disablePmCorrectionFlag)
 
 	log.Printf("exiting...")
 }

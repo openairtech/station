@@ -9,7 +9,6 @@ require (
 	github.com/d2r2/go-i2c v0.0.0-20181113114621-14f8dd4e89ce
 	github.com/d2r2/go-logger v0.0.0-20181221090742-9998a510495e
 	github.com/grandcat/zeroconf v0.0.0-20190424104450-85eadb44205c
-	github.com/karalabe/xgo v0.0.0-20190301120235-2d6d1848fb02 // indirect
 	github.com/miekg/dns v1.1.8 // indirect
 	github.com/openairtech/api v0.0.0
 	github.com/openairtech/sds011 v0.0.0-20191029135153-f4ccb629bd55

@@ -81,3 +81,18 @@ func Float32RefRound(r *float32, places int) float32 {
 	}
 	return Float32Round(*r, places)
 }
+
+// Convert string slice s to comma-separated values string
+func SliceToString(s []string) string {
+	return strings.Join(s, ", ")
+}
+
+// Check given string a is contained in string slice s
+func StringInSlice(a string, s []string) bool {
+	for _, b := range s {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
