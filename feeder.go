@@ -116,12 +116,15 @@ func NewLuftdatenFeeder() *LuftdatenFeeder {
 }
 
 func (lf *LuftdatenFeeder) Feed(data *StationData) {
-	sensorId := fmt.Sprintf("raspi-%s", data.TokenId[:12])
+	numSensorId := data.TokenId[:12]
+	sensorId := fmt.Sprintf("raspi-%s", numSensorId)
 
 	if time.Since(lf.lastSensorDataPostTime) < lf.sensorDataPostInterval {
 		log.Debugf("[Luftdaten] %s: skip sensor data posting", sensorId)
 		return
 	}
+
+	lf.lastSensorDataPostTime = time.Now()
 
 	pmSensorData := &SensorData{
 		SoftwareVersion: data.Version,
@@ -130,7 +133,17 @@ func (lf *LuftdatenFeeder) Feed(data *StationData) {
 			{ValueType: "P2", Value: Float32RefRound(data.LastMeasurement.Pm25, 1)},
 		},
 	}
-	lf.postSensorData(sensorId, 1, pmSensorData)
+	if err := lf.postSensorData(sensorId, 1, pmSensorData); err != nil {
+		if httpError, ok := err.(*HttpError); ok {
+			if httpError.StatusCode == 403 {
+				log.Infof("[Luftdaten] please register your station "+
+					"at https://devices.sensor.community/sensors/register "+
+					"(Sensor ID: %s, Sensor Board: raspi, Sensor Types: SDS011/BME280)",
+					numSensorId)
+				return
+			}
+		}
+	}
 
 	envSensorData := &SensorData{
 		SoftwareVersion: data.Version,
@@ -140,12 +153,11 @@ func (lf *LuftdatenFeeder) Feed(data *StationData) {
 			{ValueType: "pressure", Value: 100 * Float32RefRound(data.LastMeasurement.Pressure, 2)},
 		},
 	}
-	lf.postSensorData(sensorId, 11, envSensorData)
+	_ = lf.postSensorData(sensorId, 11, envSensorData)
 
-	lf.lastSensorDataPostTime = time.Now()
 }
 
-func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensorData *SensorData) {
+func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensorData *SensorData) error {
 	log.Debugf("[Luftdaten] %s: posting sensor [%d] data to %s", sensorId, sensorPin, lf.apiServerUrl)
 
 	headers := map[string]interface{}{
@@ -156,10 +168,12 @@ func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensor
 	var r map[string]*json.RawMessage
 	if err := HttpPostJson(lf.apiServerUrl, headers, sensorData, &r); err != nil {
 		log.Errorf("[Luftdaten] %s: sensor [%d] data posting failed: %v", sensorId, sensorPin, err)
-		return
+		return err
 	}
 
 	log.Debugf("[Luftdaten] %s: successfully posted sensor [%d] data", sensorId, sensorPin)
+
+	return nil
 }
 
 // https://github.com/zakarlyukin/aircms/blob/master/docs/index.rst
@@ -189,6 +203,8 @@ func (acf *AirCmsFeeder) Feed(data *StationData) {
 		log.Debugf("[AirCMS] %s: skip sensor data posting", login)
 		return
 	}
+
+	acf.lastSensorDataPostTime = time.Now()
 
 	token := fmt.Sprintf("%s:%s:%s:%s:%s:%s",
 		data.TokenId[0:2], data.TokenId[2:4], data.TokenId[4:6],
@@ -228,10 +244,15 @@ func (acf *AirCmsFeeder) Feed(data *StationData) {
 	var r []byte
 	if r, err = HttpPostData(postUrl, nil, []byte(d)); err != nil {
 		log.Errorf("[AirCMS] %s: sensor data posting failed: %v", login, err)
+		if httpError, ok := err.(*HttpError); ok {
+			if httpError.StatusCode == 403 {
+				log.Infof("[AirCMS] please register your station "+
+					"at https://aircms.online/#/adddevice "+
+					"(ID: %s, MAC: %s)", login, token)
+			}
+		}
 		return
 	}
 
 	log.Debugf("[AirCMS] %s: successfully posted sensor data, response: %s", login, string(r))
-
-	acf.lastSensorDataPostTime = time.Now()
 }

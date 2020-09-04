@@ -25,6 +25,15 @@ import (
 
 var httpClient http.Client
 
+type HttpError struct {
+	Message    string
+	StatusCode int
+}
+
+func (he *HttpError) Error() string {
+	return he.Message
+}
+
 func InitHttp(timeout time.Duration) {
 	httpClient = http.Client{
 		Timeout: timeout,
@@ -44,7 +53,10 @@ func HttpGetData(url string, res interface{}) error {
 	}
 
 	if r.StatusCode < http.StatusOK || r.StatusCode > http.StatusIMUsed {
-		return fmt.Errorf("%d: %s", r.StatusCode, b)
+		return &HttpError{
+			Message:    fmt.Sprintf("%d: %s", r.StatusCode, b),
+			StatusCode: r.StatusCode,
+		}
 	}
 
 	return json.Unmarshal(b, &res)
@@ -72,7 +84,10 @@ func HttpPostData(url string, headers map[string]interface{}, d []byte) ([]byte,
 	}
 
 	if r.StatusCode < http.StatusOK || r.StatusCode > http.StatusIMUsed {
-		return nil, fmt.Errorf("%d: %s", r.StatusCode, b)
+		return nil, &HttpError{
+			Message:    fmt.Sprintf("%d: %s", r.StatusCode, b),
+			StatusCode: r.StatusCode,
+		}
 	}
 
 	return b, nil
