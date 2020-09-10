@@ -15,7 +15,7 @@ TIMESTAMP_VAR := main.Timestamp
 VERSION ?= $(shell git describe --always --dirty --tags)
 TIMESTAMP := $(shell date '+%Y-%m-%d_%T%Z')
 
-GOBUILD_LDFLAGS := -ldflags "-s -w -X $(VERSION_VAR)=$(VERSION) -X $(TIMESTAMP_VAR)=$(TIMESTAMP)"
+GOBUILD_LDFLAGS := -ldflags "-linkmode external -extldflags \"-static\" -s -w -X $(VERSION_VAR)=$(VERSION) -X $(TIMESTAMP_VAR)=$(TIMESTAMP)"
 
 default: all
 
@@ -27,10 +27,10 @@ build:
 build-static: $(addprefix build-static-, $(ARCH))
 
 build-static-amd64:
-	env CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).amd64
+	env CGO_ENABLED=1 CC=musl-gcc GOOS=linux GOARCH=amd64 go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).amd64
 
 build-static-arm:
-	env CGO_ENABLED=1 CC=arm-linux-gnueabi-gcc GOOS=linux GOARCH=arm go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).arm
+	env CGO_ENABLED=1 CC=arm-linux-musleabi-gcc GOOS=linux GOARCH=arm go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).arm
 
 shasum:
 	cd $(BINDIR) && for file in $(ARCH) ; do sha256sum ./$(BIN).$${file} > ./$(BIN).$${file}.sha256.txt; done
