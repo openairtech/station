@@ -36,8 +36,19 @@ import (
 	"github.com/openairtech/api"
 )
 
-// System epoch time (2019-01-01 GMT) as an Unix time
-const systemEpoch = 1546300800
+const (
+	// System epoch time (2019-01-01 GMT) as an Unix time
+	systemEpoch = 1546300800
+	// Heater disabling humidity hysteresis (in percents)
+	heaterDisableHumidityHysteresis = 5
+)
+
+type HeaterState bool
+
+const (
+	HeaterOn  HeaterState = true
+	HeaterOff HeaterState = false
+)
 
 type StationData struct {
 	Version         string
@@ -50,6 +61,8 @@ type Station interface {
 	Version() string
 	Start() error
 	Stop()
+	HeaterState() HeaterState
+	TurnHeater(state HeaterState)
 	GetData() (*StationData, error)
 }
 
@@ -79,6 +92,15 @@ func (es *EspStation) Start() error {
 
 func (es *EspStation) Stop() {
 	log.Print("stopped ESP station")
+}
+
+func (es *EspStation) HeaterState() HeaterState {
+	// TODO support heater for ESP station
+	return HeaterOff
+}
+
+func (es *EspStation) TurnHeater(_ HeaterState) {
+	log.Warn("heater control is not supported yet")
 }
 
 func (es *EspStation) GetData() (*StationData, error) {
@@ -128,10 +150,13 @@ type RpiStation struct {
 	pmLock sync.RWMutex
 	pm25   float32
 	pm10   float32
+
+	heaterPin   int
+	heaterState HeaterState
 }
 
 func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string,
-	sdsSensorInterval int) (*RpiStation, error) {
+	sdsSensorInterval int, heaterPin int) (*RpiStation, error) {
 	macAddress := WirelessInterfaceMacAddr()
 	if macAddress == "" {
 		return nil, errors.New("can't determine RPi station MAC address")
@@ -150,6 +175,7 @@ func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensor
 		bmeSensorAddress:  bmeSensorAddress,
 		sdsSensorPort:     sdsSensorPort,
 		sdsSensorInterval: sdsSensorInterval,
+		heaterPin:         heaterPin,
 	}, nil
 }
 
@@ -253,6 +279,34 @@ func (rs *RpiStation) Stop() {
 	rs.sdsSensor.Close()
 }
 
+func (rs *RpiStation) HeaterState() HeaterState {
+	return rs.heaterState
+}
+
+func (rs *RpiStation) TurnHeater(state HeaterState) {
+	rs.heaterState = state
+
+	cmdPinMode := fmt.Sprintf("gpio -1 mode %d out", rs.heaterPin)
+	if err := Execute(cmdPinMode, 5*time.Second); err != nil {
+		log.Errorf("can't set heater pin %d output mode: %v", rs.heaterPin, err)
+	}
+
+	pinState := 0
+	if state == HeaterOn {
+		pinState = 1
+	}
+	cmdPinState := fmt.Sprintf("gpio -1 write %d %d", rs.heaterPin, pinState)
+	if err := Execute(cmdPinState, 5*time.Second); err != nil {
+		log.Errorf("can't set heater pin %d state %d: %v", rs.heaterPin, pinState, err)
+	}
+
+	if state == HeaterOn {
+		log.Debug("heater turned on")
+	} else {
+		log.Debug("heater turned off")
+	}
+}
+
 func (rs *RpiStation) GetData() (*StationData, error) {
 	timestamp := api.UnixTime(time.Now())
 
@@ -300,12 +354,18 @@ func (rs *RpiStation) GetData() (*StationData, error) {
 }
 
 func RunStation(ctx context.Context, station Station, feeders []Feeder, updateInterval time.Duration,
-	settleTime time.Duration, disablePmCorrectionFlag bool) {
+	settleTime time.Duration, disablePmCorrection, enableHeater bool, heaterTurnOnHumidity int) {
 	p := time.Duration(0)
 
 	if err := station.Start(); err != nil {
 		log.Errorf("can't start station: %v", err)
 		return
+	}
+
+	// Turn heater off at startup and at exit, if it's enabled
+	if enableHeater {
+		station.TurnHeater(HeaterOff)
+		defer station.TurnHeater(HeaterOff)
 	}
 
 	defer station.Stop()
@@ -323,7 +383,18 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updateIn
 
 			m := data.LastMeasurement
 
-			if !disablePmCorrectionFlag {
+			if enableHeater && m.Humidity != nil {
+				humidity := int(*m.Humidity)
+				if station.HeaterState() == HeaterOff {
+					if humidity >= heaterTurnOnHumidity {
+						log.Infof("turning heater ON (humidity: %d%%)", humidity)
+						station.TurnHeater(HeaterOn)
+					}
+				} else if humidity <= heaterTurnOnHumidity-heaterDisableHumidityHysteresis {
+					log.Infof("turning heater OFF (humidity: %d%%)", humidity)
+					station.TurnHeater(HeaterOff)
+				}
+			} else if !disablePmCorrection {
 				correctPm(m)
 			}
 

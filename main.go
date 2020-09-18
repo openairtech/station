@@ -78,6 +78,10 @@ func main() {
 
 	disablePmCorrectionFlag := flag.Bool("c", false, "disable PM values correction by humidity")
 
+	enableHeaterFlag := flag.Bool("H", false, "enable PM sensor heater (disables PM values correction by humidity)")
+	heaterTurnOnHumidity := flag.Int("R", 60, "relative humidity value threshold to turn PM sensor heater on")
+	heaterGpioPin := flag.Int("G", 7, "PM sensor heater control GPIO pin number")
+
 	fnl := SliceToString(FeederNameList())
 	enabledFeeders := stringArray{}
 	flag.Var(&enabledFeeders, "E", fmt.Sprintf("enable feeder (%s)", fnl))
@@ -158,12 +162,13 @@ func main() {
 		station = NewEspStation(version, *espHost, *espPort)
 	} else {
 		var err error
-		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3); err != nil {
+		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3, *heaterGpioPin); err != nil {
 			log.Fatalf("can't initialize RPi station: %v", err)
 		}
 	}
 
-	RunStation(ctx, station, ef, *updateInterval, *settleTime, *disablePmCorrectionFlag)
+	RunStation(ctx, station, ef, *updateInterval, *settleTime, *disablePmCorrectionFlag,
+		*enableHeaterFlag, *heaterTurnOnHumidity)
 
 	log.Printf("exiting...")
 }

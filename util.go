@@ -15,13 +15,19 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
 	"net"
+	"os/exec"
 	"strings"
+	"sync"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 // Close given closer without error checking
@@ -95,4 +101,88 @@ func StringInSlice(a string, s []string) bool {
 		}
 	}
 	return false
+}
+
+// Execute command using system shell with timeout
+func Execute(command string, timeout time.Duration) error {
+	// Set shell and command execution flag
+	shell, flag := "/bin/sh", "-c"
+
+	// Create command execution and get stdout/stderr
+	cmd := exec.Command(shell, flag, command)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	defer CloseQuietly(stdout)
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	defer CloseQuietly(stderr)
+
+	timeoutFlag := false
+	var timeoutFlagLock sync.RWMutex
+
+	// Start command execution
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	// Create command result channel
+	result := make(chan error, 1)
+	defer close(result)
+	go func() {
+		err := cmd.Wait()
+		timeoutFlagLock.RLock()
+		defer timeoutFlagLock.RUnlock()
+		if !timeoutFlag {
+			result <- err
+		}
+	}()
+
+	// Log stdout/stderr
+	outScanner := bufio.NewScanner(stdout)
+	go func() {
+		for outScanner.Scan() {
+			log.Debugf("STDOUT: %s", outScanner.Text())
+		}
+		if err := outScanner.Err(); err != nil {
+			log.Errorf("STDOUT: error: %v", err)
+		}
+	}()
+	errScanner := bufio.NewScanner(stderr)
+	go func() {
+		for errScanner.Scan() {
+			log.Debugf("STDERR: %s", errScanner.Text())
+		}
+		if err := errScanner.Err(); err != nil {
+			log.Errorf("STDERR: error: %v", err)
+		}
+	}()
+
+	// Wait for result indefinitely if no timeout set
+	if timeout == 0 {
+		return <-result
+	}
+
+	// Wait for result for given duration if timeout set
+	select {
+	case <-time.After(timeout):
+		timeoutFlagLock.Lock()
+		defer timeoutFlagLock.Unlock()
+		timeoutFlag = true
+		if cmd.Process != nil {
+			if err := cmd.Process.Kill(); err != nil {
+				log.Errorf("timeout (%v): %q, not killed: %v", timeout, command, err)
+			} else {
+				log.Warningf("timeout (%v): %q, killed", timeout, command)
+			}
+		} else {
+			log.Warningf("timeout (%v): %q, nothing to kill", timeout, command)
+		}
+		return fmt.Errorf("timeout (%v): %q", timeout, command)
+	case err := <-result:
+		return err
+	}
 }
