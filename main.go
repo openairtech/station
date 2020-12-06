@@ -4,9 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
+	"regexp"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -82,6 +85,8 @@ func main() {
 	heaterTurnOnHumidity := flag.Int("R", 60, "relative humidity value threshold to turn PM sensor heater on")
 	heaterGpioPin := flag.Int("G", 7, "PM sensor heater control GPIO pin number")
 
+	stationTokenId := flag.String("I", "", "Station token ID (will be generated if not specified)")
+
 	fnl := SliceToString(FeederNameList())
 	enabledFeeders := stringArray{}
 	flag.Var(&enabledFeeders, "E", fmt.Sprintf("enable feeder (%s)", fnl))
@@ -102,6 +107,15 @@ func main() {
 
 	if !StringInSlice(*mode, StationModeList()) {
 		log.Fatalf("invalid station mode: %s", *mode)
+	}
+
+	if *stationTokenId != "" {
+		valid, _ := regexp.MatchString(`^[0-9a-f]{40}$`, *stationTokenId)
+		if !valid {
+			rand.Seed(time.Now().UTC().UnixNano())
+			s := Sha1(strconv.FormatInt(rand.Int63(), 10))
+			log.Fatalf("invalid station token ID: '%s' (must be valid SHA1 sum, like '%s')", *stationTokenId, s)
+		}
 	}
 
 	version := fmt.Sprintf("%s-%s_%s-%s_%s", *mode, Version, Timestamp, runtime.GOARCH, runtime.GOOS)
@@ -159,10 +173,10 @@ func main() {
 
 	var station Station
 	if *mode == StationModeEsp {
-		station = NewEspStation(version, *espHost, *espPort)
+		station = NewEspStation(version, *espHost, *espPort, *stationTokenId)
 	} else {
 		var err error
-		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3, *heaterGpioPin); err != nil {
+		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3, *heaterGpioPin, *stationTokenId); err != nil {
 			log.Fatalf("can't initialize RPi station: %v", err)
 		}
 	}

@@ -71,13 +71,16 @@ type EspStation struct {
 
 	host string
 	port int
+
+	tokenId string
 }
 
-func NewEspStation(version, host string, port int) *EspStation {
+func NewEspStation(version, host string, port int, tokenId string) *EspStation {
 	return &EspStation{
 		version: version,
 		host:    host,
 		port:    port,
+		tokenId: tokenId,
 	}
 }
 
@@ -118,7 +121,12 @@ func (es *EspStation) GetData() (*StationData, error) {
 
 	m := data.Measurement(api.UnixTime(time.Now()))
 
-	tokenId := stationTokenId(data.WiFi.MacAddress())
+	var tokenId string
+	if es.tokenId != "" {
+		tokenId = es.tokenId
+	} else {
+		tokenId = stationTokenId(data.WiFi.MacAddress())
+	}
 	log.Debugf("token ID: %s", tokenId)
 
 	return &StationData{
@@ -137,9 +145,8 @@ type RpiStation struct {
 	sdsSensorPort     string
 	sdsSensorInterval int
 
-	startTime  time.Time
-	macAddress string
-	tokenId    string
+	startTime time.Time
+	tokenId   string
 
 	i2cBus     *i2c.I2C
 	serialPort serial.Port
@@ -155,21 +162,20 @@ type RpiStation struct {
 	heaterState HeaterState
 }
 
-func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string,
-	sdsSensorInterval int, heaterPin int) (*RpiStation, error) {
-	macAddress := WirelessInterfaceMacAddr()
-	if macAddress == "" {
-		return nil, errors.New("can't determine RPi station MAC address")
+func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sdsSensorInterval int, heaterPin int, tokenId string) (*RpiStation, error) {
+	if tokenId == "" {
+		macAddress := WirelessInterfaceMacAddr()
+		if macAddress == "" {
+			return nil, errors.New("can't determine RPi station MAC address")
+		}
+		log.Debugf("MAC address: %s", macAddress)
+		tokenId = stationTokenId(macAddress)
 	}
-
-	tokenId := stationTokenId(macAddress)
-	log.Debugf("MAC address: %s", macAddress)
 	log.Debugf("token ID: %s", tokenId)
 
 	return &RpiStation{
 		version:           version,
 		startTime:         time.Now(),
-		macAddress:        macAddress,
 		tokenId:           tokenId,
 		i2cBusId:          i2cBusId,
 		bmeSensorAddress:  bmeSensorAddress,
