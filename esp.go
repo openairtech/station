@@ -85,6 +85,14 @@ type EspSensors struct {
 	TaskNumber      int                  `json:"TaskNumber"`
 }
 
+type EspGpioControlResponse struct {
+	Log    string `json:"log"`
+	Plugin int    `json:"plugin"`
+	Pin    int    `json:"pin"`
+	Mode   string `json:"mode"`
+	State  int    `json:"state"`
+}
+
 func (ed *EspData) Measurement(t api.UnixTime) *api.Measurement {
 	m := api.Measurement{
 		Timestamp: &t,

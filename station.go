@@ -73,14 +73,18 @@ type EspStation struct {
 	port int
 
 	tokenId string
+
+	heaterPin   int
+	heaterState HeaterState
 }
 
-func NewEspStation(version, host string, port int, tokenId string) *EspStation {
+func NewEspStation(version, host string, port int, heaterPin int, tokenId string) *EspStation {
 	return &EspStation{
-		version: version,
-		host:    host,
-		port:    port,
-		tokenId: tokenId,
+		version:   version,
+		host:      host,
+		port:      port,
+		tokenId:   tokenId,
+		heaterPin: heaterPin,
 	}
 }
 
@@ -98,12 +102,29 @@ func (es *EspStation) Stop() {
 }
 
 func (es *EspStation) HeaterState() HeaterState {
-	// TODO support heater for ESP station
-	return HeaterOff
+	return es.heaterState
 }
 
-func (es *EspStation) TurnHeater(_ HeaterState) {
-	log.Warn("heater control is not supported yet")
+func (es *EspStation) TurnHeater(state HeaterState) {
+	pinState := 0
+	if state == HeaterOn {
+		pinState = 1
+	}
+
+	url := fmt.Sprintf("http://%s:%d/control?cmd=GPIO,%d,%d", es.host, es.port, es.heaterPin, pinState)
+	var response EspGpioControlResponse
+	if err := HttpGetData(url, &response); err != nil {
+		log.Errorf("can't set heater pin %d state %d: %v", es.heaterPin, pinState, err)
+		return
+	}
+
+	es.heaterState = state
+
+	if state == HeaterOn {
+		log.Debug("heater turned on")
+	} else {
+		log.Debug("heater turned off")
+	}
 }
 
 func (es *EspStation) GetData() (*StationData, error) {
@@ -162,7 +183,8 @@ type RpiStation struct {
 	heaterState HeaterState
 }
 
-func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sdsSensorInterval int, heaterPin int, tokenId string) (*RpiStation, error) {
+func NewRpiStation(version string, i2cBusId int, bmeSensorAddress int, sdsSensorPort string, sdsSensorInterval int,
+	heaterPin int, tokenId string) (*RpiStation, error) {
 	if tokenId == "" {
 		macAddress := WirelessInterfaceMacAddr()
 		if macAddress == "" {
@@ -290,11 +312,10 @@ func (rs *RpiStation) HeaterState() HeaterState {
 }
 
 func (rs *RpiStation) TurnHeater(state HeaterState) {
-	rs.heaterState = state
-
 	cmdPinMode := fmt.Sprintf("gpio -1 mode %d out", rs.heaterPin)
 	if err := Execute(cmdPinMode, 5*time.Second); err != nil {
 		log.Errorf("can't set heater pin %d output mode: %v", rs.heaterPin, err)
+		return
 	}
 
 	pinState := 0
@@ -304,7 +325,10 @@ func (rs *RpiStation) TurnHeater(state HeaterState) {
 	cmdPinState := fmt.Sprintf("gpio -1 write %d %d", rs.heaterPin, pinState)
 	if err := Execute(cmdPinState, 5*time.Second); err != nil {
 		log.Errorf("can't set heater pin %d state %d: %v", rs.heaterPin, pinState, err)
+		return
 	}
+
+	rs.heaterState = state
 
 	if state == HeaterOn {
 		log.Debug("heater turned on")

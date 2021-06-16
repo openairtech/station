@@ -62,9 +62,11 @@ func main() {
 
 	espHost := flag.String("h", "OpenAir.local", "ESP station address")
 	espPort := flag.Int("p", 80, "ESP station port")
+	espHeaterGpioPin := flag.Int("g", 14, "ESP station PM sensor heater control GPIO pin number")
 
 	rpiI2cBusId := flag.Int("i", 1, "RPi station I2C bus ID")
 	rpiSerialPort := flag.String("s", "/dev/ttyAMA0", "RPi station serial port name")
+	rpiHeaterGpioPin := flag.Int("G", 7, "RPi station PM sensor heater control GPIO pin number")
 
 	apiServerUrl := flag.String("a", "https://api.openair.city/v1/feeder",
 		"OpenAir feeder endpoint address")
@@ -83,7 +85,6 @@ func main() {
 
 	enableHeaterFlag := flag.Bool("H", false, "enable PM sensor heater (disables PM values correction by humidity)")
 	heaterTurnOnHumidity := flag.Int("R", 60, "relative humidity value threshold to turn PM sensor heater on")
-	heaterGpioPin := flag.Int("G", 7, "PM sensor heater control GPIO pin number")
 
 	stationTokenId := flag.String("I", "", "Station token ID (will be generated if not specified)")
 
@@ -173,10 +174,11 @@ func main() {
 
 	var station Station
 	if *mode == StationModeEsp {
-		station = NewEspStation(version, *espHost, *espPort, *stationTokenId)
+		station = NewEspStation(version, *espHost, *espPort, *espHeaterGpioPin, *stationTokenId)
 	} else {
 		var err error
-		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort, 3, *heaterGpioPin, *stationTokenId); err != nil {
+		if station, err = NewRpiStation(version, *rpiI2cBusId, 0x76, *rpiSerialPort,
+			3, *rpiHeaterGpioPin, *stationTokenId); err != nil {
 			log.Fatalf("can't initialize RPi station: %v", err)
 		}
 	}
