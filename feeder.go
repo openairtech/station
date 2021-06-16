@@ -25,10 +25,16 @@ import (
 	"github.com/openairtech/api"
 )
 
+const (
+	// Max feeder error length to log without truncating
+	maxFeederErrorLogLength = 255
+)
+
 type Feeder interface {
 	Feed(data *StationData)
 }
 
+// OpenAirFeeder feeds measurement data to OpenAir project server
 // https://github.com/openairtech/api
 type OpenAirFeeder struct {
 	apiServerUrl             string
@@ -75,7 +81,8 @@ func (oaf *OpenAirFeeder) Feed(data *StationData) {
 
 	var r api.Result
 	if err := HttpPostJson(oaf.apiServerUrl, nil, f, &r); err != nil {
-		log.Errorf("[OpenAir] data posting failed: %v", err)
+		log.Errorf("[OpenAir] data posting failed: %s",
+			TruncateString(err.Error(), maxFeederErrorLogLength))
 		return
 	}
 	if r.Status != api.StatusOk {
@@ -99,6 +106,7 @@ type SensorData struct {
 	SensorDataValues []SensorDataValue `json:"sensordatavalues"`
 }
 
+// LuftdatenFeeder feeds measurement data to Luftdaten (now Sensor.community) project server
 // https://github.com/opendata-stuttgart/meta/wiki/APIs
 // https://github.com/opendata-stuttgart/sensors-software/blob/master/airrohr-firmware/airrohr-firmware.ino
 type LuftdatenFeeder struct {
@@ -167,7 +175,8 @@ func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensor
 
 	var r map[string]*json.RawMessage
 	if err := HttpPostJson(lf.apiServerUrl, headers, sensorData, &r); err != nil {
-		log.Errorf("[Luftdaten] %s: sensor [%d] data posting failed: %v", sensorId, sensorPin, err)
+		log.Errorf("[Luftdaten] %s: sensor [%d] data posting failed: %s", sensorId, sensorPin,
+			TruncateString(err.Error(), maxFeederErrorLogLength))
 		return err
 	}
 
@@ -176,6 +185,7 @@ func (lf *LuftdatenFeeder) postSensorData(sensorId string, sensorPin int, sensor
 	return nil
 }
 
+// AirCmsFeeder feeds measurement data to AirCMS project server
 // https://github.com/zakarlyukin/aircms/blob/master/docs/index.rst
 type AirCmsFeeder struct {
 	apiServerUrl           string
@@ -243,7 +253,8 @@ func (acf *AirCmsFeeder) Feed(data *StationData) {
 
 	var r []byte
 	if r, err = HttpPostData(postUrl, nil, []byte(d)); err != nil {
-		log.Errorf("[AirCMS] %s: sensor data posting failed: %v", login, err)
+		log.Errorf("[AirCMS] %s: sensor data posting failed: %s", login,
+			TruncateString(err.Error(), maxFeederErrorLogLength))
 		if httpError, ok := err.(*HttpError); ok {
 			if httpError.StatusCode == 403 {
 				log.Infof("[AirCMS] please register your station "+

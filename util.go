@@ -30,12 +30,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// Close given closer without error checking
+// CloseQuietly closes given closer without error checking
 func CloseQuietly(closer io.Closer) {
 	_ = closer.Close()
 }
 
-// Parse given address and split it to host and port (if any)
+// ParseAddr parses given address and split it to host and port (if any)
 func ParseAddr(addr string) (host, port string) {
 	e := strings.SplitN(addr, ":", 2)
 
@@ -46,7 +46,7 @@ func ParseAddr(addr string) (host, port string) {
 	return e[0], e[1]
 }
 
-// Get wireless interface (with name starting with 'wl') MAC address
+// WirelessInterfaceMacAddr gets wireless interface (with name starting with 'wl') MAC address
 // or empty string if no wireless interface found
 func WirelessInterfaceMacAddr() string {
 	interfaces, _ := net.Interfaces()
@@ -58,14 +58,14 @@ func WirelessInterfaceMacAddr() string {
 	return ""
 }
 
-// Compute SHA1 checksum for given string
+// Sha1 computes SHA1 checksum for given string
 func Sha1(s string) string {
 	h := sha1.New()
 	h.Write([]byte(s))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// Convert reference to float32 to its string representation
+// Float32RefToString converts reference to float32 to its string representation
 func Float32RefToString(r *float32) string {
 	if r == nil {
 		return ""
@@ -74,13 +74,13 @@ func Float32RefToString(r *float32) string {
 	return fmt.Sprintf("%.1f", *r)
 }
 
-// Round float32 to given number of decimal places
+// Float32Round rounds float32 to given number of decimal places
 func Float32Round(x float32, places int) float32 {
 	pow := math.Pow(10, float64(places))
 	return float32(math.Round(pow*float64(x)) / pow)
 }
 
-// Round referenced float32 to given number of decimal places
+// Float32RefRound rounds referenced float32 to the given number of decimal places
 func Float32RefRound(r *float32, places int) float32 {
 	if r == nil {
 		return 0
@@ -88,12 +88,12 @@ func Float32RefRound(r *float32, places int) float32 {
 	return Float32Round(*r, places)
 }
 
-// Convert string slice s to comma-separated values string
+// SliceToString convert string slice s to the comma-separated values string
 func SliceToString(s []string) string {
 	return strings.Join(s, ", ")
 }
 
-// Check given string a is contained in string slice s
+// StringInSlice checks given string a is contained in the string slice s
 func StringInSlice(a string, s []string) bool {
 	for _, b := range s {
 		if b == a {
@@ -101,6 +101,30 @@ func StringInSlice(a string, s []string) bool {
 		}
 	}
 	return false
+}
+
+// SubString extracts substring from input string start position with given length
+func SubString(input string, start int, length int) string {
+	asRunes := []rune(input)
+
+	if start >= len(asRunes) {
+		return ""
+	}
+
+	if start+length > len(asRunes) {
+		length = len(asRunes) - start
+	}
+
+	return string(asRunes[start : start+length])
+}
+
+// TruncateString checks length of string a and if needed truncates it
+// to the given length by adding an ellipsis to the end
+func TruncateString(a string, length int) string {
+	if len(a) > length {
+		return fmt.Sprintf("%s…", SubString(a, 0, length))
+	}
+	return a
 }
 
 // Execute command using system shell with timeout
