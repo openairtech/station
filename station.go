@@ -76,6 +76,8 @@ type EspStation struct {
 
 	heaterPin   int
 	heaterState HeaterState
+
+	lastUptime *time.Duration
 }
 
 func NewEspStation(version, host string, port int, heaterPin int, tokenId string) *EspStation {
@@ -150,10 +152,19 @@ func (es *EspStation) GetData() (*StationData, error) {
 	}
 	log.Debugf("token ID: %s", tokenId)
 
+	uptime := time.Duration(data.System.Uptime) * time.Minute
+
+	if es.lastUptime != nil && uptime < *es.lastUptime {
+		log.Warn("ESP station reboot detected")
+		es.heaterState = HeaterOff
+	}
+
+	es.lastUptime = &uptime
+
 	return &StationData{
 		Version:         es.version,
 		TokenId:         tokenId,
-		Uptime:          time.Duration(data.System.Uptime) * time.Minute,
+		Uptime:          uptime,
 		LastMeasurement: m,
 	}, nil
 }
