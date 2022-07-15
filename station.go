@@ -394,9 +394,14 @@ func (rs *RpiStation) GetData() (*StationData, error) {
 	}, nil
 }
 
-func RunStation(ctx context.Context, station Station, feeders []Feeder, updateInterval time.Duration,
-	settleTime time.Duration, disablePmCorrection, enableHeater bool, heaterTurnOnHumidity int) {
+func RunStation(ctx context.Context, station Station, feeders []Feeder, publishers []Publisher,
+	updateInterval time.Duration, settleTime time.Duration, disablePmCorrection, enableHeater bool,
+	heaterTurnOnHumidity int) {
 	p := time.Duration(0)
+
+	for _, publisher := range publishers {
+		publisher.Start()
+	}
 
 	if err := station.Start(); err != nil {
 		log.Errorf("can't start station: %v", err)
@@ -410,6 +415,10 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updateIn
 	}
 
 	defer station.Stop()
+
+	for _, publisher := range publishers {
+		defer publisher.Stop()
+	}
 
 	for {
 		select {
@@ -443,23 +452,23 @@ func RunStation(ctx context.Context, station Station, feeders []Feeder, updateIn
 				Float32RefToString(m.Temperature), Float32RefToString(m.Humidity), Float32RefToString(m.Pressure),
 				Float32RefToString(m.Pm25), Float32RefToString(m.Pm10))
 
-			if len(feeders) == 0 {
-				continue
-			}
-
 			if time.Now().Before(time.Unix(systemEpoch, 0)) {
-				log.Info("skipping station data feeding since station system time probably is not in sync")
+				log.Info("ignoring station data since station system time probably is not in sync")
 				continue
 			}
 
 			if data.Uptime < settleTime {
-				log.Infof("skipping station data feeding since station uptime (%+v) is "+
+				log.Infof("ignoring station data since station uptime (%+v) is "+
 					"shorter than data settle time (%+v)", data.Uptime, settleTime)
 				continue
 			}
 
 			for _, feeder := range feeders {
 				feeder.Feed(data)
+			}
+
+			for _, publisher := range publishers {
+				publisher.Publish(data)
 			}
 
 		case <-ctx.Done():

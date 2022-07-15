@@ -94,6 +94,8 @@ func main() {
 	disabledFeeders := stringArray{}
 	flag.Var(&disabledFeeders, "D", fmt.Sprintf("disable feeder (%s)", fnl))
 
+	httpPublisherPort := flag.Int("J", 0, "sensor data HTTP publisher port (0 to disable HTTP publisher)")
+
 	flag.Parse()
 
 	if *versionFlag {
@@ -172,6 +174,12 @@ func main() {
 
 	log.Debugf("enabled feeders: [%s]", SliceToString(efn))
 
+	var ps []Publisher
+
+	if *httpPublisherPort > 0 {
+		ps = append(ps, NewHttpPublisher(*httpPublisherPort))
+	}
+
 	var station Station
 	if *mode == StationModeEsp {
 		station = NewEspStation(version, *espHost, *espPort, *espHeaterGpioPin, *stationTokenId)
@@ -183,7 +191,7 @@ func main() {
 		}
 	}
 
-	RunStation(ctx, station, ef, *updateInterval, *settleTime, *disablePmCorrectionFlag,
+	RunStation(ctx, station, ef, ps, *updateInterval, *settleTime, *disablePmCorrectionFlag,
 		*enableHeaterFlag, *heaterTurnOnHumidity)
 
 	log.Printf("exiting...")

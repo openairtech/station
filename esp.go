@@ -15,57 +15,60 @@
 package main
 
 import (
+	"time"
+
 	"github.com/openairtech/api"
 )
 
 type EspData struct {
-	System  EspSystem    `json:"System"`
-	WiFi    EspWiFi      `json:"WiFi"`
-	Sensors []EspSensors `json:"Sensors"`
-	TTL     int          `json:"TTL"`
+	System  *EspSystem   `json:"System,omitempty"`
+	WiFi    *EspWiFi     `json:"WiFi,omitempty"`
+	Sensors []EspSensors `json:"Sensors,omitempty"`
+	TTL     int          `json:"TTL,omitempty"`
 }
 
 type EspSystem struct {
-	Build             int     `json:"Build"`
-	GitBuild          string  `json:"Git Build"`
-	SystemLibraries   string  `json:"System libraries"`
-	Plugins           int     `json:"Plugins"`
-	PluginDescription string  `json:"Plugin description"`
-	LocalTime         string  `json:"Local time"`
-	Unit              int     `json:"Unit"`
-	Name              string  `json:"Name"`
-	Uptime            int     `json:"Uptime"`
-	LastBootCause     string  `json:"Last boot cause"`
-	ResetReason       string  `json:"Reset Reason"`
-	Load              float32 `json:"Load"`
-	LoadLC            int     `json:"Load LC"`
-	FreeRAM           int     `json:"Free RAM"`
+	Build             int     `json:"Build,omitempty"`
+	GitBuild          string  `json:"Git Build,omitempty"`
+	SystemLibraries   string  `json:"System libraries,omitempty"`
+	Plugins           int     `json:"Plugins,omitempty"`
+	PluginDescription string  `json:"Plugin description,omitempty"`
+	LocalTime         string  `json:"Local time,omitempty"`
+	Unit              int     `json:"Unit,omitempty"`
+	Name              string  `json:"Name,omitempty"`
+	UnitName          string  `json:"Unit Name,omitempty"`
+	Uptime            int     `json:"Uptime,omitempty"`
+	LastBootCause     string  `json:"Last boot cause,omitempty"`
+	ResetReason       string  `json:"Reset Reason,omitempty"`
+	Load              float32 `json:"Load,omitempty"`
+	LoadLC            int     `json:"Load LC,omitempty"`
+	FreeRAM           int     `json:"Free RAM,omitempty"`
 }
 
 type EspWiFi struct {
-	Hostname                string `json:"Hostname"`
-	IPConfig                string `json:"IP config"`
-	IP                      string `json:"IP"`
-	SubnetMask              string `json:"Subnet Mask"`
-	GatewayIP               string `json:"Gateway IP"`
-	MACAddress              string `json:"MAC address"` // mega-20190301
-	StationMAC              string `json:"STA MAC"`     // mega-20190903
-	DNS1                    string `json:"DNS 1"`
-	DNS2                    string `json:"DNS 2"`
-	SSID                    string `json:"SSID"`
-	BSSID                   string `json:"BSSID"`
-	Channel                 int    `json:"Channel"`
-	ConnectedMsec           int    `json:"Connected msec"`
-	LastDisconnectReason    int    `json:"Last Disconnect Reason"`
-	LastDisconnectReasonStr string `json:"Last Disconnect Reason str"`
-	NumberReconnects        int    `json:"Number reconnects"`
-	RSSI                    int    `json:"RSSI"`
+	Hostname                string `json:"Hostname,omitempty"`
+	IPConfig                string `json:"IP config,omitempty"`
+	IP                      string `json:"IP,omitempty"`
+	SubnetMask              string `json:"Subnet Mask,omitempty"`
+	GatewayIP               string `json:"Gateway IP,omitempty"`
+	MACAddress              string `json:"MAC address"`       // mega-20190301
+	StationMAC              string `json:"STA MAC,omitempty"` // mega-20190903
+	DNS1                    string `json:"DNS 1,omitempty"`
+	DNS2                    string `json:"DNS 2,omitempty"`
+	SSID                    string `json:"SSID,omitempty"`
+	BSSID                   string `json:"BSSID,omitempty"`
+	Channel                 int    `json:"Channel,omitempty"`
+	ConnectedMsec           int    `json:"Connected msec,omitempty"`
+	LastDisconnectReason    int    `json:"Last Disconnect Reason,omitempty"`
+	LastDisconnectReasonStr string `json:"Last Disconnect Reason str,omitempty"`
+	NumberReconnects        int    `json:"Number reconnects,omitempty"`
+	RSSI                    int    `json:"RSSI,omitempty"`
 }
 
 type EspTaskValues struct {
-	ValueNumber int     `json:"ValueNumber"`
+	ValueNumber int     `json:"ValueNumber,omitempty"`
 	Name        string  `json:"Name"`
-	NrDecimals  int     `json:"NrDecimals"`
+	NrDecimals  int     `json:"NrDecimals,omitempty"`
 	Value       float32 `json:"Value"`
 }
 
@@ -76,13 +79,13 @@ type EspDataAcquisition struct {
 }
 
 type EspSensors struct {
-	TaskValues      []EspTaskValues      `json:"TaskValues"`
-	DataAcquisition []EspDataAcquisition `json:"DataAcquisition"`
-	TaskInterval    int                  `json:"TaskInterval"`
-	Type            string               `json:"Type"`
+	TaskValues      []EspTaskValues      `json:"TaskValues,omitempty"`
+	DataAcquisition []EspDataAcquisition `json:"DataAcquisition,omitempty"`
+	TaskInterval    int                  `json:"TaskInterval,omitempty"`
+	Type            string               `json:"Type,omitempty"`
 	TaskName        string               `json:"TaskName"`
-	TaskEnabled     bool                 `json:"TaskEnabled,string"`
-	TaskNumber      int                  `json:"TaskNumber"`
+	TaskEnabled     bool                 `json:"TaskEnabled,string,omitempty"`
+	TaskNumber      int                  `json:"TaskNumber,omitempty"`
 }
 
 type EspGpioControlResponse struct {
@@ -91,6 +94,49 @@ type EspGpioControlResponse struct {
 	Pin    int    `json:"pin"`
 	Mode   string `json:"mode"`
 	State  int    `json:"state"`
+}
+
+func NewEspData(m *api.Measurement, uptime time.Duration, name string) *EspData {
+	bmeSensor := EspSensors{
+		TaskName: "BME280",
+		TaskValues: []EspTaskValues{
+			{
+				Name:  "Temperature",
+				Value: *m.Temperature,
+			},
+			{
+				Name:  "Humidity",
+				Value: *m.Humidity,
+			},
+			{
+				Name:  "Pressure",
+				Value: *m.Pressure,
+			},
+		},
+	}
+	sdsSensor := EspSensors{
+		TaskName: "SDS011",
+		TaskValues: []EspTaskValues{
+			{
+				Name:  "PM2.5",
+				Value: *m.Pm25,
+			},
+			{
+				Name:  "PM10",
+				Value: *m.Pm10,
+			},
+		},
+	}
+	return &EspData{
+		System: &EspSystem{
+			UnitName: name,
+			Uptime:   int(uptime.Minutes()),
+		},
+		Sensors: []EspSensors{
+			bmeSensor,
+			sdsSensor,
+		},
+	}
 }
 
 func (ed *EspData) Measurement(t api.UnixTime) *api.Measurement {

@@ -1,6 +1,7 @@
 # Folders
 _test/
 bin/
+.vscode/
 
 # IDE files
 *.iml
