@@ -2,7 +2,7 @@
 
 BIN := openair-station
 PKG := github.com/openairtech/station
-ARCH := amd64 arm
+ARCH := amd64 arm arm64
 
 PUB_SERVER := openair.city
 PUB_DIR := /var/www/get.openair.city/station
@@ -31,6 +31,9 @@ build-static-amd64:
 
 build-static-arm:
 	env CGO_ENABLED=1 CC=arm-linux-musleabi-gcc GOOS=linux GOARCH=arm go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).arm
+
+build-static-arm64:
+	env CGO_ENABLED=1 CC=aarch64-linux-musleabi-gcc GOOS=linux GOARCH=arm64 go build -a -installsuffix "static" $(GOBUILD_LDFLAGS) -o $(BINDIR)/$(BIN).arm64
 
 shasum:
 	cd $(BINDIR) && for file in $(ARCH) ; do sha256sum ./$(BIN).$${file} > ./$(BIN).$${file}.sha256.txt; done

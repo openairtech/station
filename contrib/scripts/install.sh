@@ -147,6 +147,9 @@ setup_arch() {
 	    arm*)
 		ARCH=arm
 		;;
+	    aarch64)
+		ARCH=arm64
+		;;
 	    *)
 		fatal "Incompatible machine type: ${MACHINE}, exiting..."
 		;;
